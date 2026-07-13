@@ -68,6 +68,7 @@
 - InkOS 目前没有持久化 Provider 调用次数、重试次数和货币成本的统一审计账本；
 - 用户体验时多生成了第 2 章，超出 TASK-001B 的单章建议范围，但未进入 Git；
 - Studio 日志出现 1 次结构化输出解析失败信号，最终管线自行恢复并完成落盘；
+- 本机 LibreOffice 当前以 `0xC0000142` DLL 初始化失败；TASK-001C 的 DOCX 改用 Word 只读导出和 `pdftoppm` 完成逐页 QA；
 - 官方 LLM stub 与当前 Phase 5 建书协议不兼容；
 - Windows Studio E2E 启动命令不兼容；
 - 系统默认 Node/pnpm 可能绕过仓库版本声明；
