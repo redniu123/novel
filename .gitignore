@@ -35,6 +35,7 @@ docs/tasks/*
 docs/runbooks/*
 !docs/runbooks/baseline-validation.md
 !docs/runbooks/real-model-smoke.md
+!docs/runbooks/first-inkos-usage.md
 !docs/decisions/
 docs/decisions/*
 !docs/decisions/ADR-001-volume-first-mvp.md
@@ -56,6 +57,7 @@ _*.md
 secrets.json
 cookies.json
 session.json
+小说key.txt
 books/
 worlds/
 inkos.json
