@@ -75,7 +75,7 @@ InkOS 核心代码、CLI 和 Studio 行为、测试、模型路由、提示词�
 ## 测试或检查结果
 
 - 使用现有 `compact_reference_guide` 版式重新生成 DOCX；
-- 通过 `render_docx.py` 渲染全部页面并逐页检查排版、表格、图片、字体、页眉页脚和分页；
+- 已尝试标准 `render_docx.py`；本机 LibreOffice 以 `0xC0000142` DLL 初始化失败，随后用 Word 只读导出和 `pdftoppm` 生成 36 页 PNG，并逐页检查排版、表格、图片、字体、页眉页脚和分页；
 - Markdown 与 DOCX 关键事实一致，未发现密钥、完整 Base URL、小说正文或模型原始响应；
 - `git diff --check` 通过，InkOS 核心、依赖、锁文件和许可证无修改。
 
@@ -86,6 +86,7 @@ InkOS 核心代码、CLI 和 Studio 行为、测试、模型路由、提示词�
 - 模型出现过一次可恢复的结构化输出解析失败，仍需后续兼容性测试；
 - Windows Studio E2E 仍未跑通；
 - DOCX 目录字段需要在 Word 中更新后显示最终页码。
+- LibreOffice 安装当前无法启动，后续应单独修复本机 DOCX 自动渲染环境。
 
 ## 最终状态
 
