@@ -7,22 +7,22 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 项目名称 | 基于 InkOS 的小说智能体 |
-| 当前阶段 | TASK-001 与 TASK-001A 已归档，下一步为真实模型冒烟验证 |
+| 当前阶段 | TASK-001B 因合法模型凭证未配置而阻塞 |
 | InkOS 版本 | 1.7.0 |
 | 基线 Commit | `7ac8d530557154653cdac83c07dd7488c1460191` |
 | 远程默认稳定分支 | `origin/master` |
 | 本地兼容稳定分支 | `main`，跟踪 `upstream/master`，本轮保留 |
 | 集成分支 | `develop` |
+| 当前工作分支 | `test/TASK-001B-real-model-smoke` |
 | origin | `https://github.com/redniu123/novel.git` |
 | upstream | `https://github.com/Narcooo/inkos.git` |
 
 ## 任务状态
 
 - 已完成：TASK-001 `completed_with_blockers`；TASK-001A `completed`。
-- 进行中：无。
-- 待处理：TASK-001B `pending`；TASK-002 `pending`。
-- 阻塞依赖：TASK-001B 需要用户在本地安全配置合法模型凭证。
-- 下一任务：TASK-001B 真实模型冒烟验证。
+- 阻塞：TASK-001B `blocked`，合法模型凭证、Provider、模型和 Base URL 均未配置。
+- 待处理：TASK-002 `pending`，TASK-001B 通过前禁止启动。
+- 下一步：用户在本地安全配置合法凭证后恢复 TASK-001B。
 
 任务明细见 [TASK 索引](tasks/TASK-INDEX.md)。
 
@@ -50,7 +50,7 @@
 - `pnpm test` 通过：265 files、2351 tests、0 failed、0 skipped；
 - CLI、Studio 和 SQLite 运行验证通过；
 - Studio E2E 因 Windows 下 POSIX 启动命令不兼容而未执行测试；
-- 真实模型流程因没有合法凭证而未完成。
+- TASK-001B 在全量测试前的凭证门槛停止，没有模型调用。
 
 详见 [InkOS 基线分析](02-inkos-baseline.md)。
 

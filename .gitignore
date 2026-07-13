@@ -29,10 +29,12 @@ docs/*
 docs/tasks/*
 !docs/tasks/TASK-001-baseline-validation.md
 !docs/tasks/TASK-001A-project-governance.md
+!docs/tasks/TASK-001B-real-model-smoke.md
 !docs/tasks/TASK-INDEX.md
 !docs/runbooks/
 docs/runbooks/*
 !docs/runbooks/baseline-validation.md
+!docs/runbooks/real-model-smoke.md
 !docs/decisions/
 docs/decisions/*
 !docs/decisions/ADR-001-volume-first-mvp.md
