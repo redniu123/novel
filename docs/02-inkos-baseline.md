@@ -1,14 +1,14 @@
 # InkOS 1.7.0 原版基线分析
 
 验证日期：2026-07-12
-任务状态：`completed_with_blockers`
+任务状态：`completed`（TASK-001B 于 2026-07-13 解除真实模型阻塞）
 验证分支：`docs/baseline-analysis`
 
 ## 1. 基线摘要
 
 本地代码与官方仓库 `https://github.com/Narcooo/inkos.git` 的提交 `7ac8d530557154653cdac83c07dd7488c1460191` 一致，版本为 `1.7.0`。在隔离的 Node 24.14.0、pnpm 9.15.9 环境中，依赖安装、构建、类型检查以及 2351 项原有测试均通过；CLI 与 Studio 均完成运行验证，SQLite 记忆完成实际读写验证。
 
-基线有条件通过。未配置合法模型凭证，因此真实的建书、规划、正文生成、审查和修订调用仍被阻塞；官方 LLM stub 也无法满足当前 Phase 5 建书协议。Windows 下 Playwright 的 POSIX 环境变量命令无法启动 E2E 服务。这些问题不否定已完成的非 API 基线，但在进入业务二次开发前应优先解决运行环境和最小真实模型冒烟验证。
+基线通过。TASK-001B 已使用 `openai/custom` 的第三方 HTTPS OpenAI-compatible 服务完成真实 `doctor`、AI 建书、章节规划、正文、自动审查、状态投影和 SQLite 写入。官方 LLM stub 仍无法满足当前 Phase 5 建书协议，Windows 下 Playwright 的 POSIX 环境变量命令仍不能直接启动 E2E 服务；二者保留为非阻塞已知限制。
 
 本次未修改 InkOS 核心代码、依赖版本、锁文件、测试或生产配置。
 
@@ -80,6 +80,8 @@ Node 24 运行 SQLite 时会出现“内置 SQLite 仍为实验性功能”的�
 
 测试明细：core 172 files / 1658 tests；Studio 55 files / 484 tests；CLI 38 files / 209 tests。构建仅有 Studio chunk 大于 500 kB 的体积警告。
 
+2026-07-13 在相同固定工具链上复跑 `pnpm build`、`pnpm typecheck` 和 `pnpm test`，结果仍为全部通过，锁文件未改变。
+
 ## 6. CLI 验证
 
 CLI 源入口是 `packages/cli/src/index.ts`，调用 `runProgram()`；构建入口为 `packages/cli/dist/index.js`，npm bin 名为 `inkos`。`--version` 返回 `1.7.0`。
@@ -118,17 +120,19 @@ Studio 服务端入口为 `packages/studio/src/api/index.ts`，项目根目录�
 
 官方 `INKOS_AGENT_LLM_STUB=1` 也做了尝试，但 `ArchitectAgent` 抛出 `ArchitectIncompleteFoundationError`。当前 stub 输出不能满足 Phase 5 foundation 协议，因此不能用它伪造建书成功。
 
+TASK-001B 在 `tmp/TASK-001B-real-model-smoke/` 恢复验证。项目级 `.env` 由 Studio 官方导入接口导入，真实 API 探针通过；用户通过 Studio 完成 AI 建书和章节生成。验收只取第 1 章，用户随后生成的第 2 章作为体验偏差保留在本地忽略目录，不进入 Git。
+
 ## 9. 规划、写作、审查与修订
 
 | 流程 | 结果 |
 | --- | --- |
 | 项目初始化 | 通过 |
-| AI 建书与故事架构 | 阻塞：无合法模型凭证；stub 协议不兼容 |
-| 章节规划 | 静态验证和原有测试通过；真实调用阻塞 |
-| 章节正文 | 静态验证和原有测试通过；真实调用阻塞 |
-| 连续性审查 | 静态验证和原有测试通过；真实调用阻塞 |
-| 修订 | 静态验证和原有测试通过；真实调用阻塞 |
-| 状态结算与长期记忆 | 单元/集成测试通过；SQLite 独立运行读写通过 |
+| AI 建书与故事架构 | 真实模型通过 |
+| 章节规划 | 第 1 章真实计划、上下文和规则栈通过 |
+| 章节正文 | 第 1 章真实生成通过，最终 3,617 字 |
+| 连续性审查 | 自动审查完成，保留 2 条问题并进入 `ready-for-review` |
+| 修订 | 自动修订门槛未触发，修订次数 0；没有替用户执行人工批准 |
+| 状态结算与长期记忆 | 结构化状态、Markdown 投影、快照和 SQLite 真实写入通过 |
 
 自动修订并非无限循环：`PipelineRunner` 根据 `chapterReviewMode` 和 revision policy 进入审查/修订路径；manual 模式会在草稿后停下，保留人工驱动的审查、修订和接受流程。后续 MVP 仍需把“最大自动修订次数”形成明确产品配置和验收测试。
 
@@ -221,19 +225,18 @@ CLI/Studio action
 
 优先通过配置、组合、外围服务和小型适配层扩展；只有独立任务和回归测试证明必要时才改核心。
 
-## 16. 当前阻塞问题
+## 16. 当前已知限制
 
-1. 未配置合法模型凭证：无法做真实建书、规划、生成、审查和修订冒烟验证。
-2. 官方 LLM stub 与 Phase 5 foundation 协议不兼容：建书报 `ArchitectIncompleteFoundationError`。
-3. Windows Playwright 命令不兼容：`playwright.config.ts` 使用 `VAR=value command`、`&` 和 `kill %1` 的 POSIX shell 语法。
-4. 系统 Node 18.16.1 低于要求，系统 pnpm 11.7.0 与验证基线不一致。
-5. `origin` 未设置：没有用户 Fork 地址，不能推送到用户仓库。
-6. Studio 服务停止后旧浏览器页会显示 `Failed to fetch`；这是连接状态，不是 JSON 校验结论。
+1. 官方 LLM stub 与 Phase 5 foundation 协议不兼容：建书报 `ArchitectIncompleteFoundationError`。
+2. Windows Playwright 命令不兼容：`playwright.config.ts` 使用 POSIX shell 语法。
+3. 系统 Node 18.16.1 低于要求，系统 pnpm 11.7.0 与验证基线不一致。
+4. 原版没有统一持久化 Provider 调用次数、精确重试、阶段耗时和货币成本。
+5. Studio 服务停止后旧浏览器页会显示 `Failed to fetch`；这是连接状态，不是 JSON 校验结论。
 
 ## 17. 基线结论
 
-基线结论：**有条件通过**。原版源码的安装、构建、类型、测试、CLI、Studio 和 SQLite 基础能力可信，可以开始准备小范围二次开发；但在修改业务逻辑前，必须先固定 Node/pnpm 版本，并用用户本地安全配置的合法模型凭证完成一次最小端到端调用。许可证为 AGPL-3.0-only，未来网络服务化和分发方案必须进行合规评估。
+基线结论：**通过**。原版源码的安装、构建、类型、测试、CLI、Studio、真实模型主链和 SQLite 基础能力可信。后续可以进入小范围、设计先行的二次开发；许可证为 AGPL-3.0-only，未来网络服务化和分发方案必须进行合规评估。
 
 ## 18. 如何重复验证
 
-完整步骤见 [基线验证 Runbook](runbooks/baseline-validation.md)。核心顺序是：切换 Node 20/22/24 与 pnpm 9，冻结安装，构建，类型检查，测试，验证 CLI，在隔离项目执行 `inkos init`，再从该项目目录启动 Studio。真实模型步骤只在本地安全配置合法凭证后执行。
+完整步骤见 [基线验证 Runbook](runbooks/baseline-validation.md) 和 [真实模型 Runbook](runbooks/real-model-smoke.md)。核心顺序是：切换 Node 24 与 pnpm 9，冻结安装，构建，类型检查，测试，在隔离项目执行 `inkos init`，再从项目目录启动 Studio。真实凭证只能保存在被忽略的本地秘密配置中。
