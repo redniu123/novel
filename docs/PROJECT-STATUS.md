@@ -13,7 +13,7 @@
 | 远程默认稳定分支 | `origin/master` |
 | 本地兼容稳定分支 | `main`，跟踪 `upstream/master`，本轮保留 |
 | 集成分支 | `develop` |
-| 当前工作分支 | `docs/TASK-001C-inkos-guide`（归档完成后合并至 `develop`） |
+| 当前工作分支 | `develop`（TASK-001C 已归档并合并） |
 | origin | `https://github.com/redniu123/novel.git` |
 | upstream | `https://github.com/Narcooo/inkos.git` |
 
