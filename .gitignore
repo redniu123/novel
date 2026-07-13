@@ -25,11 +25,14 @@ docs/*
 !docs/00-product-brief.md
 !docs/02-inkos-baseline.md
 !docs/PROJECT-STATUS.md
+!docs/InkOS-1.7.0-功能教程与缺口指南.md
+!docs/InkOS-1.7.0-功能教程与缺口指南.docx
 !docs/tasks/
 docs/tasks/*
 !docs/tasks/TASK-001-baseline-validation.md
 !docs/tasks/TASK-001A-project-governance.md
 !docs/tasks/TASK-001B-real-model-smoke.md
+!docs/tasks/TASK-001C-inkos-guide.md
 !docs/tasks/TASK-INDEX.md
 !docs/runbooks/
 docs/runbooks/*
