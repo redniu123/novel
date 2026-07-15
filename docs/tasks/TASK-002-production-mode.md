@@ -4,7 +4,7 @@
 
 - 任务编号：TASK-002
 - 任务名称：建立 `production_mode` 配置、存储、读取与校验基础
-- 当前状态：`implemented_pending_review`
+- 当前状态：`completed`
 - 前置依赖：
   - TASK-001：原版 InkOS 基线验证完成
   - TASK-001A：项目治理完成
@@ -309,7 +309,7 @@ pnpm build
 - Commit：`feat: add isolated production mode strategy`。
 - 远程分支：`origin/feature/TASK-002-production-mode`。
 - 已知问题：读取不加锁；写入复用书级锁并在竞争时 fail-fast 返回 `BOOK_BUSY`。路径保护沿用 InkOS 词法边界，本地预置符号链接属于受信任文件系统边界。
-- Claude 审查状态：等待审查。
+- Claude 审查状态：2026-07-15 审查通过，无 Blocker、无 Major。
 
 ## 18. 遗留问题
 
@@ -318,6 +318,12 @@ pnpm build
 - Minor：未对非 InkOS 进程直接修改策略文件提供 CAS；受书级锁保护的 InkOS 写入不会并发覆盖。
 - Suggestion：后续 UI 或 CLI 接入应复用 `BookStrategyStore`，不得直接读写 JSON；该工作不属于 TASK-002。
 
-## 19. 最终状态
+## 19. 审查与验收记录
 
-`implemented_pending_review`
+- 2026-07-15 Claude Code 代码审查：通过。无 Blocker、无 Major；Minor（读取不加锁、非 InkOS 进程直写策略文件无 CAS）记录为已知限制，不阻塞验收。
+- 2026-07-15 人工验收（用户委托 Claude Code 代行）：基于 `pnpm build` 产物在隔离临时目录执行 9 项验收检查，覆盖 AC-001、AC-003、AC-004、AC-005、AC-007、AC-009、AC-011，全部通过；未接触真实书籍数据。
+- 审查期间发现并修复：`.gitignore` 缺少 `docs/modules/` 与本任务文档的白名单（此前依赖强制添加），收尾提交已补齐。
+
+## 20. 最终状态
+
+`completed`

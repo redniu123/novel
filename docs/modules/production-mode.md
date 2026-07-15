@@ -4,10 +4,10 @@
 
 - 模块名称：Production Mode
 - 关联任务：TASK-002
-- 当前状态：`implemented_pending_review`
+- 当前状态：`completed`
 - 设计目标：为每本小说建立独立、版本化、可校验的生产模式元数据
 - 当前推荐方案：独立商业元数据目录
-- 说明：Codex 已根据真实 InkOS 代码完成架构核查和实现；当前等待 Claude Code 完成架构与代码审查。
+- 说明：Codex 已根据真实 InkOS 代码完成架构核查和实现；2026-07-15 Claude Code 完成架构与代码审查（无 Blocker/Major）并受用户委托代行人工验收，9 项验收检查全部通过。
 
 ## 2. 背景与问题定义
 
@@ -546,5 +546,5 @@ pnpm build
 - 导出：`packages/core/src/index.ts`。
 - 测试：`packages/core/src/__tests__/book-strategy.test.ts`，16 项全部通过。
 - 回归：266 files、2367 tests、typecheck 和 build 全部通过。
-- 状态：`implemented_pending_review`。
-- 下一步：让 Claude Code 审查 `feature/TASK-002-production-mode`。
+- 状态：`completed`。2026-07-15 Claude Code 审查通过（无 Blocker/Major），代行人工验收 9 项检查全部通过。
+- 下一步：合并 `feature/TASK-002-production-mode` 至 `develop`，启动 TASK-003 走量生产策略绑定。

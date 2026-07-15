@@ -1,13 +1,13 @@
 # 项目状态
 
-最后更新时间：2026-07-13
+最后更新时间：2026-07-15
 
 ## 基本信息
 
 | 项目 | 当前值 |
 | --- | --- |
 | 项目名称 | 基于 InkOS 的小说智能体 |
-| 当前阶段 | TASK-002 已实现，等待 Claude Code 审查 |
+| 当前阶段 | TASK-002 审查与验收完成，待合并 `develop` 后启动 TASK-003 |
 | InkOS 版本 | 1.7.0 |
 | 基线 Commit | `7ac8d530557154653cdac83c07dd7488c1460191` |
 | 远程默认稳定分支 | `origin/master` |
@@ -19,9 +19,8 @@
 
 ## 任务状态
 
-- 已完成：TASK-001 `completed`；TASK-001A `completed`；TASK-001B `completed`；TASK-001C `completed`。
-- 待审查：TASK-002 `implemented_pending_review`，独立商业元数据、校验、原子写入和书籍隔离已实现并通过回归。
-- 下一步：让 Claude Code 审查 `feature/TASK-002-production-mode`；审查前不合并 `develop`，不启动 TASK-003。
+- 已完成：TASK-001 `completed`；TASK-001A `completed`；TASK-001B `completed`；TASK-001C `completed`；TASK-002 `completed`（2026-07-15 Claude Code 审查通过，代行人工验收 9 项检查通过）。
+- 下一步：将 `feature/TASK-002-production-mode` 合并至 `develop`，编写并启动 TASK-003（走量生产策略绑定，`pending`）。
 
 任务明细见 [TASK 索引](tasks/TASK-INDEX.md)。
 
@@ -53,6 +52,7 @@
 - TASK-001B 验收以用户生成的第 1 章为准，停在 `ready-for-review`，没有替用户执行人工批准；
 - TASK-001C 为纯文档任务，DOCX 已重新生成并完成逐页渲染检查。
 - TASK-002 新增 16 项 production mode 测试；固定 Node 24.14.0、pnpm 9.15.9 下 typecheck、test、build 均通过。
+- TASK-002 验收：2026-07-15 基于 `pnpm build` 产物在隔离临时目录完成 9 项手动验收检查（默认值、落盘持久化、书籍隔离、非法值、损坏文件、路径穿越、故事状态不受影响），全部通过。
 
 详见 [InkOS 基线分析](02-inkos-baseline.md)。
 
