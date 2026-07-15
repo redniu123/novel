@@ -1,27 +1,26 @@
 # 项目状态
 
-最后更新时间：2026-07-13
+最后更新时间：2026-07-15
 
 ## 基本信息
 
 | 项目 | 当前值 |
 | --- | --- |
 | 项目名称 | 基于 InkOS 的小说智能体 |
-| 当前阶段 | 原版基线、真实模型冒烟和使用教程已完成；下一步只编写与评审 TASK-002 设计文档 |
+| 当前阶段 | TASK-002 审查与验收完成，待合并 `develop` 后启动 TASK-003 |
 | InkOS 版本 | 1.7.0 |
 | 基线 Commit | `7ac8d530557154653cdac83c07dd7488c1460191` |
 | 远程默认稳定分支 | `origin/master` |
 | 本地兼容稳定分支 | `main`，跟踪 `upstream/master`，本轮保留 |
 | 集成分支 | `develop` |
-| 当前工作分支 | `develop`（TASK-001C 已归档并合并） |
+| 当前工作分支 | `feature/TASK-002-production-mode` |
 | origin | `https://github.com/redniu123/novel.git` |
 | upstream | `https://github.com/Narcooo/inkos.git` |
 
 ## 任务状态
 
-- 已完成：TASK-001 `completed`；TASK-001A `completed`；TASK-001B `completed`；TASK-001C `completed`。
-- 待处理：TASK-002 `pending`，当前只允许编写和评审设计文档。
-- 下一步：比较 TASK-002 的书级配置扩展与独立商业元数据方案，形成设计文档；设计获批且完成 Claude Code 审查前不创建实现分支、不修改代码。
+- 已完成：TASK-001 `completed`；TASK-001A `completed`；TASK-001B `completed`；TASK-001C `completed`；TASK-002 `completed`（2026-07-15 Claude Code 审查通过，代行人工验收 9 项检查通过）。
+- 下一步：将 `feature/TASK-002-production-mode` 合并至 `develop`，编写并启动 TASK-003（走量生产策略绑定，`pending`）。
 
 任务明细见 [TASK 索引](tasks/TASK-INDEX.md)。
 
@@ -46,12 +45,14 @@
 - `pnpm install --frozen-lockfile` 通过，1011 packages；
 - `pnpm build` 通过；
 - `pnpm typecheck` 通过；
-- `pnpm test` 通过：265 files、2351 tests、0 failed、0 skipped；
+- `pnpm test` 通过：266 files、2367 tests、0 failed、0 skipped；
 - CLI、Studio 和 SQLite 运行验证通过；
 - Studio E2E 因 Windows 下 POSIX 启动命令不兼容而未执行测试；
 - 真实 `doctor`、AI 建书、章节规划、正文、自动审查、状态投影和 SQLite 写入通过；
 - TASK-001B 验收以用户生成的第 1 章为准，停在 `ready-for-review`，没有替用户执行人工批准；
 - TASK-001C 为纯文档任务，DOCX 已重新生成并完成逐页渲染检查。
+- TASK-002 新增 16 项 production mode 测试；固定 Node 24.14.0、pnpm 9.15.9 下 typecheck、test、build 均通过。
+- TASK-002 验收：2026-07-15 基于 `pnpm build` 产物在隔离临时目录完成 9 项手动验收检查（默认值、落盘持久化、书籍隔离、非法值、损坏文件、路径穿越、故事状态不受影响），全部通过。
 
 详见 [InkOS 基线分析](02-inkos-baseline.md)。
 

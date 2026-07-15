@@ -200,6 +200,22 @@ export {
   resolveProxyUrl,
 } from "./utils/proxy-fetch.js";
 export { assertSafeBookId, deriveBookIdFromTitle, isSafeBookId } from "./utils/book-id.js";
+export {
+  BOOK_STRATEGY_ERROR_CODES,
+  BOOK_STRATEGY_RELATIVE_PATH,
+  BOOK_STRATEGY_SCHEMA_VERSION,
+  PRODUCTION_MODES,
+  BookStrategyError,
+  BookStrategySchema,
+  BookStrategyStore,
+  ProductionModeSchema,
+  type BookStrategy,
+  type BookStrategyErrorCode,
+  type BookStrategyInput,
+  type BookStrategyStoreOptions,
+  type ProductionMode,
+  type ResolvedBookStrategy,
+} from "./commercial/book-strategy.js";
 export { safeChildPath } from "./utils/path-safety.js";
 export { toPosixPath } from "./utils/posix-path.js";
 export {

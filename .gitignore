@@ -33,7 +33,12 @@ docs/tasks/*
 !docs/tasks/TASK-001A-project-governance.md
 !docs/tasks/TASK-001B-real-model-smoke.md
 !docs/tasks/TASK-001C-inkos-guide.md
+!docs/tasks/TASK-001D-governance-sync.md
+!docs/tasks/TASK-002-production-mode.md
 !docs/tasks/TASK-INDEX.md
+!docs/modules/
+docs/modules/*
+!docs/modules/production-mode.md
 !docs/runbooks/
 docs/runbooks/*
 !docs/runbooks/baseline-validation.md
