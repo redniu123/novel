@@ -7,20 +7,21 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 项目名称 | 基于 InkOS 的小说智能体 |
-| 当前阶段 | TASK-002 审查与验收完成，待合并 `develop` 后启动 TASK-003 |
+| 当前阶段 | TASK-003 设计已起草，状态为 `pending_design_review` |
 | InkOS 版本 | 1.7.0 |
 | 基线 Commit | `7ac8d530557154653cdac83c07dd7488c1460191` |
 | 远程默认稳定分支 | `origin/master` |
 | 本地兼容稳定分支 | `main`，跟踪 `upstream/master`，本轮保留 |
 | 集成分支 | `develop` |
-| 当前工作分支 | `feature/TASK-002-production-mode` |
+| 当前工作分支 | `docs/TASK-003-volume-strategy-design` |
 | origin | `https://github.com/redniu123/novel.git` |
 | upstream | `https://github.com/Narcooo/inkos.git` |
 
 ## 任务状态
 
-- 已完成：TASK-001 `completed`；TASK-001A `completed`；TASK-001B `completed`；TASK-001C `completed`；TASK-002 `completed`（2026-07-15 Claude Code 审查通过，代行人工验收 9 项检查通过）。
-- 下一步：将 `feature/TASK-002-production-mode` 合并至 `develop`，编写并启动 TASK-003（走量生产策略绑定，`pending`）。
+- 已完成：TASK-001 `completed`；TASK-001A `completed`；TASK-001B `completed`；TASK-001C `completed`；TASK-002 `completed`（2026-07-15 Claude Code 审查通过，代行人工验收 9 项检查通过，已合并 `develop`）。
+- 当前任务：TASK-003（走量小说生产策略）`pending_design_review`。
+- 下一步：Claude Code 审查 TASK-003 设计。
 
 任务明细见 [TASK 索引](tasks/TASK-INDEX.md)。
 
