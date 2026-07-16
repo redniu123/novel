@@ -4,7 +4,7 @@
 
 - 对应总任务：TASK-003
 - 子任务：TASK-003A、TASK-003B
-- 文档状态：`pending_design_review`
+- 文档状态：`approved_with_changes`
 - 起草日期：2026-07-15
 - 审查修订日期：2026-07-16
 - 设计分支：`docs/TASK-003-volume-strategy-design`
@@ -12,6 +12,7 @@
 - 前置任务：TASK-002 `completed`，已合并 `develop`
 - 本轮范围：真实代码分析和设计修订，不实现功能代码
 - 首轮审查结论：`rejected`
+- 复审结论：2026-07-16 `approved_with_changes`，无 Blocker；两项 Major 澄清已冻结到本文档
 - 参数冻结：2026-07-16 用户确认 1-12 全部采用推荐方案
 - 推荐结论：Production Policy Resolver + Thin Volume Production Orchestrator
 
@@ -20,7 +21,7 @@
 - TASK-003A：冻结策略类型、商业状态 v1 Schema、State Store、发布资格纯函数和按书查询 API。
 - TASK-003B：实现只调用一次现有 Runner 的薄编排器和商业人工审核 API。
 
-Claude Code 完成本轮设计复审前，不得进入功能实现。
+TASK-003A 可进入实现；仍不得提前实现 TASK-003B 范围。
 
 ## 2. 背景和问题定义
 
@@ -329,7 +330,7 @@ VolumeProductionOrchestrator
              |
              +----> VolumeProductionStateStore
              |
-             +----> releaseEligible(bookId, chapterNumber)
+             +----> stateStore.releaseEligible(bookId, chapterNumber)
 ```
 
 分两步实现：
@@ -624,6 +625,13 @@ awaiting_manual_review -> revision_requested
 
 ```typescript
 class VolumeProductionPolicyResolver {
+  constructor(options: {
+    readonly projectRoot: string;
+    readonly bookStrategyStore?: BookStrategyStore;
+    readonly stateManager?: StateManager;
+    readonly loadProjectConfig?: typeof loadProjectConfig;
+  });
+
   resolve(bookId: string): Promise<VolumeProductionPolicyV1>;
 }
 
@@ -632,24 +640,42 @@ summarizeChapterPipelineResult(
   policy: VolumeProductionPolicyV1,
 ): VolumePipelineObservationV1;
 
-loadVolumeProductionState(bookId: string): Promise<VolumeProductionStateV1>;
+class VolumeProductionStateStore {
+  constructor(projectRoot: string);
+
+  load(bookId: string): Promise<VolumeProductionStateV1>;
+
+  releaseEligible(
+    bookId: string,
+    chapterNumber: number,
+  ): Promise<boolean>;
+}
 
 isReleaseEligible(
   state: VolumeProductionStateV1,
   chapterNumber: number,
 ): boolean;
-
-releaseEligible(
-  bookId: string,
-  chapterNumber: number,
-): Promise<boolean>;
 ```
 
-`summarizeChapterPipelineResult` 不执行 Runner，也不持久化 `result.tokenUsage`。TASK-003B 从原始 result 单独透传可选 token 摘要。
+Resolver 和 Store 必须显式绑定 `projectRoot`，测试可注入 Store、StateManager 和配置 loader。`summarizeChapterPipelineResult` 不执行 Runner，也不持久化 `result.tokenUsage`。TASK-003B 从原始 result 单独透传可选 token 摘要。
 
 ### 13.2 TASK-003B
 
 ```typescript
+class VolumeProductionOrchestrator {
+  constructor(options: {
+    readonly projectRoot: string;
+    readonly policyResolver?: VolumeProductionPolicyResolver;
+    readonly stateStore?: VolumeProductionStateStore;
+    readonly stateManager?: StateManager;
+    readonly runnerFactory?: VolumePipelineRunnerFactory;
+  });
+
+  produceNextChapter(
+    input: ProduceNextVolumeChapterInput,
+  ): Promise<VolumeProductionResult>;
+}
+
 interface ProduceNextVolumeChapterInput {
   readonly bookId: string;
   readonly signal?: AbortSignal;
@@ -668,10 +694,6 @@ interface VolumeProductionResult {
   readonly stopReason?: VolumeProductionStopReason;
   readonly tokenUsage?: TokenUsageSummary;
 }
-
-produceNextChapter(
-  input: ProduceNextVolumeChapterInput,
-): Promise<VolumeProductionResult>;
 
 reviewChapter(input: {
   readonly bookId: string;

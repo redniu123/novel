@@ -4,16 +4,17 @@
 
 - 任务编号：TASK-003
 - 任务名称：走量小说生产策略总任务
-- 当前状态：`pending_design_review`
+- 当前状态：`in_progress`
 - 设计分支：`docs/TASK-003-volume-strategy-design`
 - 集成主线：`develop`
 - 前置任务：TASK-002 `completed`
 - 子任务：TASK-003A、TASK-003B
 - 模块设计：`docs/modules/volume-production-strategy.md`
 - 首轮设计审查：`rejected`
+- 复审结论：2026-07-16 `approved_with_changes`，无 Blocker；两项 Major 澄清已冻结
 - 审查修订日期：2026-07-16
 - 源码事实复核：2026-07-16，15 项 InkOS 接口与返回数据已逐项核对
-- 下一步：Claude Code 重新审查 TASK-003 设计
+- 下一步：Codex 实现 TASK-003A，不进入 TASK-003B
 
 本任务是 TASK-003A 和 TASK-003B 的总任务，不在一个实现轮同时交付全部代码。
 
@@ -101,7 +102,7 @@ TASK-003B 不新增 CLI、Studio 或 Scheduler 改造。
 
 ## 7. 允许修改范围
 
-当前设计轮只允许 Markdown。
+设计轮已完成并通过复审，TASK-003A 可进入实现。
 
 TASK-003A 设计批准后允许：
 
@@ -156,7 +157,7 @@ TASK-003B 的 Runner 工厂强制 `PipelineConfig.chapterReviewMode = "auto"`，
 
 ### FR-005 发布资格
 
-`releaseEligible(bookId, chapterNumber)` 必须按模块设计的确定性真值规则计算。
+`new VolumeProductionStateStore(projectRoot).releaseEligible(bookId, chapterNumber)` 必须按模块设计的确定性真值规则计算。
 
 ### FR-006 人工审核
 
@@ -176,7 +177,7 @@ TASK-003B 的 Runner 工厂强制 `PipelineConfig.chapterReviewMode = "auto"`，
 
 ### FR-010 公开接入点
 
-只使用根导出的 `PipelineRunner`、`StateManager`、`BookStrategyStore`、`buildLengthSpec` 和相关类型。`runWithAbortSignal` 作为 Runner 公共实例方法使用；不得假设它或 `runChapterReviewCycle` 是独立根导出。
+只依赖已公开稳定的 API：`PipelineRunner`、`StateManager`、`BookStrategyStore`、`loadProjectConfig`、`buildLengthSpec` 和相关类型。core 内部实现可使用相对路径导入这些公开模块，避免从根 `index.ts` 反向导入形成循环；禁止导入或调用未公开内部函数，例如 `runChapterReviewCycle`。`runWithAbortSignal` 只能作为 Runner 公共实例方法使用。
 
 ## 10. 总体验收标准
 
@@ -288,13 +289,13 @@ TASK-003B 的 Runner 工厂强制 `PipelineConfig.chapterReviewMode = "auto"`，
 
 > 实现和复审阶段填写。
 
-- Blocker：
-- Major：
-- Minor：
-- Suggestion：
+- Blocker：无。
+- Major：复审要求的 projectRoot 绑定 API 形状、公开 API 导入边界已澄清。
+- Minor：TASK-003B 超时语义需记录 `timeoutFired`/`userAborted` 并用 fake timer 测试；不阻塞 TASK-003A。
+- Suggestion：无需新增前置任务，继续按 TASK-003A/003B 拆分推进。
 
 ## 19. 最终状态
 
-`pending_design_review`
+`in_progress`
 
-下一步：Claude Code 重新审查 TASK-003 设计。
+下一步：Codex 实现 TASK-003A。

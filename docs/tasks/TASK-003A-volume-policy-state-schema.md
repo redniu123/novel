@@ -4,7 +4,7 @@
 
 - 任务编号：TASK-003A
 - 任务名称：冻结走量策略并实现商业状态 v1 Schema/Store
-- 当前状态：`pending_design_review`
+- 当前状态：`in_progress`
 - 总任务：TASK-003
 - 前置依赖：TASK-002；TASK-003 设计复审通过
 - 建议实现分支：`feature/TASK-003A-volume-policy-state`
@@ -59,7 +59,7 @@
 
 ### FR-A01 Policy Resolver
 
-生产默认 Resolver 必须调用 `BookStrategyStore.load`、`StateManager.loadBookConfig` 和 `loadProjectConfig(projectRoot, { requireApiKey: false })`，再调用 `buildLengthSpec` 解析冻结策略；允许注入 loader 测试，但不得直接读取新的商业策略文件。
+生产默认 Resolver 必须显式绑定 `projectRoot`，并调用 `BookStrategyStore.load`、`StateManager.loadBookConfig` 和 `loadProjectConfig(projectRoot, { requireApiKey: false })`，再调用 `buildLengthSpec` 解析冻结策略；允许注入 loader 测试，但不得直接读取新的商业策略文件。
 
 ### FR-A02 State v1
 
@@ -93,7 +93,7 @@ books/<bookId>/commercial/volume-production-state.json
 
 ### FR-A07 发布资格
 
-实现模块设计第 14.3 节的完整真值规则，不读取 `ChapterMeta.status`。
+实现模块设计第 14.3 节的完整真值规则，并通过 `new VolumeProductionStateStore(projectRoot).releaseEligible(bookId, chapterNumber)` 暴露按书查询；不读取 `ChapterMeta.status`。
 
 ### FR-A08 数据边界
 
@@ -180,4 +180,4 @@ books/<bookId>/commercial/volume-production-state.json
 
 ## 13. 最终状态
 
-`pending_design_review`
+`in_progress`
