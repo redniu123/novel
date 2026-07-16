@@ -1,13 +1,13 @@
 # 项目状态
 
-最后更新时间：2026-07-15
+最后更新时间：2026-07-16
 
 ## 基本信息
 
 | 项目 | 当前值 |
 | --- | --- |
 | 项目名称 | 基于 InkOS 的小说智能体 |
-| 当前阶段 | TASK-003 设计已起草，状态为 `pending_design_review` |
+| 当前阶段 | TASK-003 首轮设计审查被拒后已完成参数冻结、状态 Schema 补全和任务拆分，等待重新审查 |
 | InkOS 版本 | 1.7.0 |
 | 基线 Commit | `7ac8d530557154653cdac83c07dd7488c1460191` |
 | 远程默认稳定分支 | `origin/master` |
@@ -20,8 +20,11 @@
 ## 任务状态
 
 - 已完成：TASK-001 `completed`；TASK-001A `completed`；TASK-001B `completed`；TASK-001C `completed`；TASK-002 `completed`（2026-07-15 Claude Code 审查通过，代行人工验收 9 项检查通过，已合并 `develop`）。
-- 当前任务：TASK-003（走量小说生产策略）`pending_design_review`。
-- 下一步：Claude Code 审查 TASK-003 设计。
+- 当前总任务：TASK-003（走量小说生产策略）`pending_design_review`。
+- 当前子任务：TASK-003A（走量策略与商业状态 Schema）`pending_design_review`。
+- 后续子任务：TASK-003B（走量单章薄编排器）`pending`，依赖 TASK-003A。
+- 2026-07-16：TASK-003 首轮设计审查结论为 `rejected`；用户已确认 1-12 全部推荐参数并批准拆分，文档已按 Blocker/Major/Minor/Suggestion 修订。
+- 下一步：Claude Code 重新审查 TASK-003 设计。
 
 任务明细见 [TASK 索引](tasks/TASK-INDEX.md)。
 
@@ -54,6 +57,7 @@
 - TASK-001C 为纯文档任务，DOCX 已重新生成并完成逐页渲染检查。
 - TASK-002 新增 16 项 production mode 测试；固定 Node 24.14.0、pnpm 9.15.9 下 typecheck、test、build 均通过。
 - TASK-002 验收：2026-07-15 基于 `pnpm build` 产物在隔离临时目录完成 9 项手动验收检查（默认值、落盘持久化、书籍隔离、非法值、损坏文件、路径穿越、故事状态不受影响），全部通过。
+- TASK-003 本轮仍为纯文档设计修订，未运行功能测试。
 
 详见 [InkOS 基线分析](02-inkos-baseline.md)。
 
@@ -62,12 +66,15 @@
 - [ADR-001](decisions/ADR-001-volume-first-mvp.md)：第一阶段采用单本走量小说 MVP；
 - 优先扩展和组合，不直接重写 InkOS 核心；
 - 故事权威状态与商业运营数据分离；
-- 保留人工最终审核和人工发布。
+- 保留人工最终审核和人工发布；
+- TASK-003 商业完整管线重试固定为 0，只保留 Provider 现有有限重试；
+- TASK-003A 先交付策略和商业状态，TASK-003B 再交付薄编排器。
 
 ## 当前风险
 
 - 第 1 章记录 67,637 tokens；体验期间额外生成的第 2 章记录 162,749 tokens，实际成本和计费口径仍需独立核对；
 - InkOS 目前没有持久化 Provider 调用次数、重试次数和货币成本的统一审计账本；
+- 原始 `write next --count`、`auto` 和 Scheduler 可绕过商业入口；TASK-003 只保证商业入口互斥，严格全局治理留待后续任务；
 - 用户体验时多生成了第 2 章，超出 TASK-001B 的单章建议范围，但未进入 Git；
 - Studio 日志出现 1 次结构化输出解析失败信号，最终管线自行恢复并完成落盘；
 - 本机 LibreOffice 当前以 `0xC0000142` DLL 初始化失败；TASK-001C 的 DOCX 改用 Word 只读导出和 `pdftoppm` 完成逐页 QA；

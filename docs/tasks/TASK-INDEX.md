@@ -1,6 +1,6 @@
 # TASK 索引
 
-最后更新时间：2026-07-15
+最后更新时间：2026-07-16
 
 | 任务编号 | 名称 | 状态 | 分支 | 依赖 | 交付物 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -9,6 +9,8 @@
 | TASK-001B | 真实模型冒烟验证 | `completed` | `test/TASK-001B-real-model-smoke` | TASK-001A；合法模型凭证 | 冒烟任务单、真实模型结果、用户 Runbook | `openai/custom` 真实链路通过；第 1 章作为验收样本，第 2 章为用户体验范围偏差 |
 | TASK-001C | InkOS 功能教程与缺口指南 | `completed` | `docs/TASK-001C-inkos-guide` | TASK-001、TASK-001A、TASK-001B | 教程 Markdown、DOCX、缺口矩阵 | 已按真实模型结果更新并完成 DOCX 渲染验收 |
 | TASK-002 | 最小 `production_mode` 配置 | `completed` | `feature/TASK-002-production-mode` | TASK-001B；设计文档批准 | TASK 文档、配置设计、实现与测试 | 2026-07-15 Claude Code 审查通过（无 Blocker/Major），代行人工验收 9 项检查通过；已合并 `develop` |
-| TASK-003 | 走量小说生产策略 | `pending_design_review` | `docs/TASK-003-volume-strategy-design` | TASK-002 | 任务单、模块设计、策略实现与测试 | 设计已起草；下一步：Claude Code 审查 TASK-003 设计 |
+| TASK-003 | 走量小说生产策略总任务 | `pending_design_review` | `docs/TASK-003-volume-strategy-design` | TASK-002 | 总体设计、任务拆分、总体验收 | 首轮审查 rejected；参数已冻结并拆为 TASK-003A/003B，等待重新审查 |
+| TASK-003A | 走量策略与商业状态 Schema | `pending_design_review` | `docs/TASK-003-volume-strategy-design` | TASK-003 设计复审 | Policy、State v1、Store、映射和发布资格 | 设计已起草；实现分支待复审后创建 |
+| TASK-003B | 走量单章薄编排器 | `pending` | 待创建 | TASK-003A | Orchestrator、商业审核 API、超时和测试 | TASK-003A 完成后启动 |
 
 状态值统一使用：`pending`、`pending_design_review`、`in_progress`、`completed`、`completed_with_blockers`、`blocked`、`failed`、`implemented_pending_review`。

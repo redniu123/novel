@@ -3,457 +3,286 @@
 ## 1. 基本信息
 
 - 任务编号：TASK-003
-- 任务名称：走量小说生产策略
+- 任务名称：走量小说生产策略总任务
 - 当前状态：`pending_design_review`
 - 设计分支：`docs/TASK-003-volume-strategy-design`
 - 集成主线：`develop`
-- 前置任务：TASK-002 `completed`，已合并 `develop`
+- 前置任务：TASK-002 `completed`
+- 子任务：TASK-003A、TASK-003B
 - 模块设计：`docs/modules/volume-production-strategy.md`
-- 下一步：Claude Code 审查 TASK-003 设计
+- 首轮设计审查：`rejected`
+- 审查修订日期：2026-07-16
+- 下一步：Claude Code 重新审查 TASK-003 设计
 
-本轮只完成真实代码分析和设计文档，不实现功能代码。设计审查通过且业务参数确认后，才能进入实现。
+本任务是 TASK-003A 和 TASK-003B 的总任务，不在一个实现轮同时交付全部代码。
 
 ## 2. 背景
 
-TASK-002 已提供按书隔离的 `productionMode`：
+TASK-002 已提供按书隔离的 `productionMode`，但模式尚未接入章节生产。首轮 TASK-003 设计因业务参数未冻结、商业状态 Schema 不完整、范围过大和外层重试风险被拒绝。
 
-- `volume`
-- `flagship`
+2026-07-16 用户确认全部推荐参数，并批准拆分：
 
-当前 `BookStrategyStore` 可以安全读取和保存模式，旧书无策略文件时默认解析为 `volume`。但是该模式尚未接入 `PipelineRunner`、CLI、Studio 或 Scheduler，不会改变章节生产行为。
+- TASK-003A：参数、Policy Schema、商业状态 v1 Schema 和 Store。
+- TASK-003B：薄编排器、单章商业入口和商业人工审核 API。
 
-InkOS 已有单章规划、写作、自动审查、有限自动修订、状态校验、持久化、人工批准和状态修复能力。TASK-003 应通过商业策略层组合这些能力，使 `volume` 产生最小业务效果，而不是重写章节管线。
+## 3. 总目标
 
-## 3. 目标
+让 `productionMode = "volume"` 在独立商业入口中产生以下效果：
 
-1. 真实读取 TASK-002 的 `productionMode`。
-2. 为 `volume` 解析一组明确、可测试的生产策略。
-3. 每次商业生产运行只生产一章。
-4. 每章正文生成后执行现有自动审查。
-5. 自动修订次数有明确上限。
-6. 章节完成后根据用户确认规则进入人工审核闸门。
-7. 未满足审核规则时不可获得发布资格。
-8. 明确目标字数、允许偏差、失败、超时、重试和停止规则。
-9. 将商业生产状态与故事权威状态分离。
-10. 保持原始 InkOS Runner、Prompt 和模型路由不变。
+1. 每次只生产一章。
+2. 使用现有自动审查。
+3. 自动修订读取 `writing.reviewRetries`，默认 1。
+4. 每章必须人工审核。
+5. 未通过商业人工审核不得获得发布资格。
+6. 目标字数读取 `BookConfig.chapterWordCount`。
+7. 商业字数门槛使用现有 `LengthSpec` 软区间。
+8. 商业完整管线自动重试固定为 0。
+9. 单章超时固定为 60 分钟。
+10. 失败后暂停该书商业生产。
+11. `flagship` 商业入口返回策略未实现。
+12. 不修改 InkOS 核心章节管线。
 
 ## 4. 前置依赖
 
-必须满足：
+- TASK-002 已完成、审查并合并 `develop`。
+- `BookStrategyStore.load(bookId)` 保持可用。
+- 本模块设计通过 Claude Code 复审。
+- TASK-003A 必须先于 TASK-003B 完成。
+- TASK-003A、TASK-003B 分别使用独立实现分支、测试和审查。
 
-- TASK-002 状态为 `completed`。
-- TASK-002 已合并到最新 `develop`。
-- `BookStrategyStore.load(bookId)`、类型、Schema、默认行为和错误模型保持可用。
-- `develop` 包含 TASK-002 实现和测试。
-- `docs/modules/volume-production-strategy.md` 通过 Claude Code 设计审查。
-- 第 18 节列出的业务参数已由用户确认。
+## 5. 冻结业务决策
 
-当前已确认：
+1. 目标字数来源：`BookConfig.chapterWordCount`。
+2. 允许偏差：现有 `LengthSpec` 软区间。
+3. 自动修订：`writing.reviewRetries`，默认 1。
+4. 每章人工审核：是。
+5. 人工结果：`approve`、`reject`、`request_revision`。
+6. Warning：硬门槛全部通过时允许人工批准。
+7. 商业完整管线可重试错误：无。
+8. 商业完整管线最大重试：0。
+9. 失败动作：暂停该书商业生产。
+10. `flagship`：商业入口返回 `PRODUCTION_POLICY_NOT_IMPLEMENTED`。
+11. 单章超时：60 分钟。
+12. 商业策略存储：不新增策略文件，使用版本化常量和已有配置。
 
-- TASK-002 完成分支：`feature/TASK-002-production-mode`
-- TASK-002 合并后的 `develop` Commit：`30af928`
-- TASK-003 设计分支直接基于 `origin/develop`
-- TASK-002 无 Blocker、无 Major；保留一个非 InkOS 进程直接写策略文件没有 CAS 的 Minor
+任何子任务不得自行改变这些值。
 
-## 5. 用户场景
+## 6. 子任务拆分
 
-### 场景 1：默认走量书生产下一章
+### 6.1 TASK-003A
 
-书籍没有 `book-strategy.json`。
+交付：
 
-预期：
+- `VolumeProductionPolicyV1`
+- `VolumeProductionStateV1`
+- 按章、追加历史的商业状态 Store
+- Pipeline 结果映射纯函数
+- `isReleaseEligible` 纯函数和 `releaseEligible(bookId, chapterNumber)` API
+- 状态转换和数据隔离测试
 
-- `BookStrategyStore.load` 返回默认 `volume`
-- 解析走量策略
-- 只调用一次完整单章管线
-- 正文完成后自动审查
-- 按策略进入人工闸门或完成状态
-- 不自动开始下一章
+TASK-003A 不调用 Runner 或 LLM。
 
-### 场景 2：显式走量书
+### 6.2 TASK-003B
 
-书籍策略文件为 `productionMode: "volume"`。
+交付：
 
-预期与默认走量书一致，不因 `source` 是 `default` 或 `file` 产生行为差异。
+- Thin Volume Production Orchestrator
+- 每次恰好一次 `writeNextChapter`
+- 运行前后章节号检查
+- 60 分钟超时
+- 商业人工审核 API
+- 同书商业入口互斥
+- 编排和回归测试
 
-### 场景 3：自动审查不通过
+TASK-003B 不新增 CLI、Studio 或 Scheduler 改造。
 
-预期：
+## 7. 允许修改范围
 
-- 自动修订最多执行用户确认的次数
-- 达到上限后停止
-- 不通过时不可获得发布资格
-- 不启动下一章
+当前设计轮只允许 Markdown。
 
-### 场景 4：人工审核
+TASK-003A 设计批准后允许：
 
-预期：
+- `packages/core/src/commercial/volume-production-policy.ts`
+- `packages/core/src/commercial/volume-production-state.ts`
+- `packages/core/src/index.ts` 最小导出
+- 对应测试
+- 状态文档
 
-- 只有合法的待审核状态可以提交人工决定
-- 人工结果按用户确认的枚举处理
-- 未通过人工闸门时 `releaseEligible = false`
-- 不调用自动发布
+TASK-003B 设计批准且 TASK-003A 完成后允许：
 
-### 场景 5：模型或结构化输出失败
+- `packages/core/src/commercial/volume-production-orchestrator.ts`
+- `packages/core/src/commercial/volume-production-review.ts`
+- `packages/core/src/index.ts` 最小导出
+- 对应测试
+- 状态文档
 
-预期：
-
-- 只对用户确认的安全错误执行有限重试
-- 审查 `parseFailed` 不视为成功
-- 超时、上下文超限、重试耗尽后停止当前运行
-- 不自动继续下一章
-
-### 场景 6：同书并发请求
-
-预期：
-
-- 同一 `bookId` 同时只允许一个商业生产运行
-- 第二个请求明确返回忙或已运行错误
-- 不产生两个相同章节或两个下一章
-
-### 场景 7：`flagship`
-
-预期由用户确认：
-
-- 保持原版 InkOS 行为；或
-- 明确返回策略尚未实现
-
-不得误用走量策略。
-
-## 6. 允许修改范围
-
-### 6.1 当前设计轮
-
-只允许修改：
-
-- `docs/modules/volume-production-strategy.md`
-- `docs/tasks/TASK-003-volume-production-strategy.md`
-- `docs/PROJECT-STATUS.md`
-- `docs/tasks/TASK-INDEX.md`
-
-### 6.2 设计批准后的实现轮
-
-允许在重新确认实施计划后修改：
-
-- `packages/core/src/commercial/` 下新增的策略、状态和薄编排模块
-- `packages/core/src/index.ts` 的最小导出
-- 对应单元测试和临时目录集成测试
-- 经设计审查批准的最小 CLI 商业入口及测试
-- 本任务和项目状态 Markdown
-
-如实现需要修改以上范围之外的代码，必须停止并重新评审。
-
-## 7. 禁止修改范围
+## 8. 禁止修改范围
 
 不得：
 
-- 将 `productionMode` 分支直接加入 Writer、Planner、Auditor 或 Reviser
-- 重写 `PipelineRunner` 的章节阶段
-- 重复实现章节规划、正文、审查、修订、真相校验、快照或落盘
-- 修改核心 Prompt
-- 新增或修改模型路由
-- 自动选择不同模型
-- 修改模型价格表
-- 实现完整 Token 或费用账本
-- 修改故事权威状态含义
-- 修改 `story/state`
-- 修改故事 SQLite Schema
+- 修改 Runner 内部章节阶段
+- 重组 Planner、Writer、Auditor、Reviser
+- 修改 Prompt、Provider 或模型路由
+- 修改现有 `review approve/reject`
+- 修改 `ChapterMeta.status`
+- 修改故事权威状态或 SQLite Schema
+- 新增商业完整管线自动重试
+- 新增 CLI、Studio、daemon 或 Scheduler 接入
 - 实现自动发布
-- 实现平台账号管理
-- 实现多书并行
-- 实现市场选题、商业总编、多读者模拟或真实评论反馈
+- 实现 Token 和成本账本
 - 实现 `flagship` 深度策略
-- 进行 Studio 大规模界面改造
-- 升级依赖或修改锁文件
-- 修改许可证
+- 修改依赖、锁文件或许可证
 
-## 8. 功能要求
+## 9. 总体功能要求
 
-### FR-001 模式读取
+### FR-001 模式
 
-商业生产入口必须调用 `BookStrategyStore.load(bookId)`。不得直接读取 `commercial/book-strategy.json`。
+必须调用 `BookStrategyStore.load(bookId)`。默认和显式 `volume` 使用同一冻结策略；`flagship` 明确拒绝商业入口。
 
-### FR-002 策略解析
+### FR-002 单章
 
-`ProductionPolicyResolver` 必须将 `volume` 解析为不可变 `VolumeProductionPolicy`，并明确每个字段来源。
+TASK-003B 每次商业运行恰好调用一次 `writeNextChapter`。
 
-### FR-003 单章边界
+### FR-003 自动审查和修订
 
-每次 Volume Production Orchestrator 调用最多调用一次 `PipelineRunner.writeNextChapter`，固定 `chaptersPerRun = 1`。
+固定自动审查；自动修订只由现有 `writing.reviewRetries` 控制。
 
-### FR-004 自动审查
+### FR-004 商业状态
 
-走量入口必须使用 `chapterReviewMode: "auto"`。不得使用 `writeDraft` 代替完整管线。
+按章节保存运行和人工决定的追加历史，不覆盖旧 run 或 review。
 
-### FR-005 自动修订上限
+### FR-005 发布资格
 
-自动修订上限复用 `writing.reviewRetries`，具体值由用户确认；达到上限后不得从外层重启完整管线规避限制。
+`releaseEligible(bookId, chapterNumber)` 必须按模块设计的确定性真值规则计算。
 
 ### FR-006 人工审核
 
-按用户确认规则，将成功完成的章节置为独立商业待审核状态。只有合法状态转换可以批准、拒绝或请求修订。
+商业审核只写 `commercial/volume-production-state.json`，不调用现有 review 命令。
 
-### FR-007 发布资格
+### FR-007 失败
 
-提供确定性的 `releaseEligible` 判断。TASK-003 不写 `published`，不调用发布平台。
+外层完整管线不重试；失败、超时、审查解析失败、critical、字数越界或状态降级均暂停该书。
 
-### FR-008 字数策略
+### FR-008 并发
 
-目标字数复用 `BookConfig.chapterWordCount`。用户确认的商业允许偏差通过非 LLM 后置检查执行，不修改 Prompt。
+只承诺同书商业入口互斥。商业生产期间通过运行规则关闭 daemon 和原始批量入口。
 
-### FR-009 失败停止
+### FR-009 数据边界
 
-模型失败、上下文超限、审查解析失败、状态降级、超时、取消或重试耗尽时停止当前运行，不自动进入下一章。
+商业状态不保存正文、故事事实、`ChapterMeta.status`、`tokenUsage` 或费用。
 
-### FR-010 有限重试
+## 10. 总体验收标准
 
-保留 Provider 现有最多 2 次瞬时重试。商业层只对用户确认的安全错误执行有限重试，不盲目重试非幂等完整管线。
+1. TASK-003A 和 TASK-003B 分别完成审查和验收。
+2. 默认 `volume` 和显式 `volume` 行为一致。
+3. `flagship` 商业入口稳定返回未实现。
+4. 每次商业运行最多一章，Runner 最多调用一次。
+5. 商业完整管线重试次数为 0。
+6. 每章必须商业人工审核。
+7. Warning 只有在硬门槛通过时可人工批准。
+8. 未批准章节 `releaseEligible = false`。
+9. 商业状态按章保存 run 和 review 历史。
+10. 现有 InkOS review 命令、Runner、Prompt 和模型路由不变。
+11. 商业状态与故事状态完全分离。
+12. 精确测试、typecheck、全量测试和 build 通过。
 
-### FR-011 并发
+## 11. 自动测试
 
-同一 `bookId` 同时最多一个商业运行；不同书的数据和状态完全隔离。本任务不实现多书并行调度。
+详细测试分别记录在 TASK-003A 和 TASK-003B 任务单。
 
-### FR-012 商业状态
+总任务至少要求：
 
-商业状态按书保存在 `commercial/`，使用严格版本化 Schema、原子写入和受保护状态转换。
+- Policy 冻结值测试
+- State v1 Schema 和基数测试
+- Pipeline 映射表测试
+- `releaseEligible` 真值表测试
+- 单次 Runner 调用测试
+- 零商业重试测试
+- 超时和暂停测试
+- 商业审核边界测试
+- 两书隔离测试
+- 原版 Runner 回归测试
 
-### FR-013 故事边界
+## 12. 人工验收
 
-商业状态不得复制或覆盖正文、故事事实、Markdown 投影、故事状态或 SQLite Schema。
+完成 TASK-003B 后，在隔离测试项目中验证：
 
-### FR-014 `flagship`
+1. 默认 `volume` 只生成一章。
+2. 自动审查和有限修订生效。
+3. 成功或 warning-only 章节进入商业待审核。
+4. critical、parseFailed、字数越界和 state-degraded 均暂停。
+5. 未人工批准前不可发布。
+6. 三种人工决定只改变 commercial 状态。
+7. `flagship` 商业入口明确拒绝。
+8. 超时后不自动重跑。
+9. 同书两个商业请求只有一个调用 Runner。
+10. 原始故事状态和章节状态未被商业审核改写。
 
-必须显式处理，不得静默使用 `volume`。具体兼容行为由用户确认。
-
-### FR-015 核心复用
-
-薄编排器不得分别调用 Planner、Writer、Auditor 和 Reviser 重组现有 Runner。
-
-### FR-016 Token 边界
-
-可以透传现有 `tokenUsage`，但不得计算费用、保存价格或建立成本账本。
-
-## 9. 验收标准
-
-### AC-001 TASK-002 接口被真实使用
-
-测试证明每次商业生产前调用 `BookStrategyStore.load(bookId)`，默认和显式 `volume` 均生效。
-
-### AC-002 单章运行
-
-一次商业运行恰好调用一次 `writeNextChapter`，没有多章循环。
-
-### AC-003 自动审查
-
-走量策略强制自动审查；结果包含真实审查状态。
-
-### AC-004 修订有界
-
-自动修订次数不超过用户确认的 `writing.reviewRetries`，达到上限后停止。
-
-### AC-005 人工闸门
-
-需要人工审核时，未批准章节的 `releaseEligible` 必须为 false；非法批准转换被拒绝。
-
-### AC-006 警告处理
-
-只有用户确认允许时，warning 才能进入可人工批准路径；critical、`parseFailed` 和 `state-degraded` 不得直接批准。
-
-### AC-007 字数门槛
-
-目标字数来自书籍配置，允许偏差按用户确认规则确定性计算；越界时不可发布且不启动下一章。
-
-### AC-008 错误停止
-
-模型失败、超时、上下文超限、结构化审查失败和状态降级分别产生稳定错误或停止原因。
-
-### AC-009 禁止无限重试
-
-自动修订、Provider 重试和商业层重试均有可断言上限。
-
-### AC-010 并发隔离
-
-同书并发请求只有一个进入 Runner；不同 `bookId` 的商业状态互不覆盖。
-
-### AC-011 故事数据不受污染
-
-商业状态变化不改写故事权威状态含义、不新增故事 SQLite 字段、不复制正文。
-
-### AC-012 `flagship` 兼容
-
-`flagship` 按用户确认行为执行，且不创建或应用走量策略状态。
-
-### AC-013 原版 Runner 不变
-
-现有 `PipelineRunner`、Prompt、模型路由和原始调用测试不发生行为回归。
-
-### AC-014 TASK-004 边界
-
-没有价格表、费用计算、预算拦截或完整 Token 账本。
-
-### AC-015 回归通过
-
-精确测试、`pnpm typecheck`、`pnpm test` 和 `pnpm build` 全部通过。
-
-## 10. 自动测试
-
-至少新增：
-
-1. 默认 `volume` 策略解析
-2. 显式 `volume` 策略解析
-3. `flagship` 分派
-4. 策略文件损坏阻止运行
-5. 商业配置 Schema 校验
-6. 目标字数来源
-7. 自动修订上限来源
-8. 每次只调用一次 Runner
-9. 强制自动审查
-10. `ready-for-review` 状态映射
-11. `audit-failed` 状态映射
-12. `state-degraded` 状态映射
-13. 审查 `parseFailed`
-14. 字数偏差内和偏差外
-15. 人工批准、拒绝和请求修订
-16. 非法状态转换
-17. 未人工通过不可发布
-18. warning 人工通过规则
-19. 同书并发拒绝
-20. 两书隔离
-21. 超时和取消
-22. 可重试错误和不可重试错误
-23. 重试耗尽
-24. 商业状态原子写失败
-25. stale `runId` 不覆盖当前状态
-26. Token 只透传不计费
-27. 故事状态和 SQLite 不受影响
-28. 原版 Runner 回归
-
-实现阶段测试命令：
-
-```bash
-pnpm typecheck
-pnpm test
-pnpm build
-```
-
-还必须运行新增模块和最小入口的精确测试命令。
-
-## 11. 人工验收
-
-在隔离测试项目中完成：
-
-1. 创建或选择一本无策略文件的书，确认解析为 `volume`。
-2. 启动一次商业生产，确认只生成一章。
-3. 确认章节执行自动审查，修订不超过配置上限。
-4. 确认成功后进入正确商业审核状态。
-5. 未批准前检查 `releaseEligible = false`。
-6. 按用户确认结果执行人工审核，验证状态转换。
-7. 模拟 warning、critical 和 `parseFailed`，验证批准规则。
-8. 模拟模型失败、超时和 `state-degraded`，确认不会继续下一章。
-9. 同时启动两个同书请求，确认只有一个进入 Runner。
-10. 检查商业文件与故事状态、正文和 SQLite 的边界。
-11. 检查 `flagship` 行为符合用户确认。
-12. 检查没有模型路由、Prompt、价格表或发布行为变化。
-
-不得使用用户真实小说正文进行破坏性验收。
-
-## 12. 数据安全
+## 13. 数据安全
 
 - 所有商业数据由 `bookId` 隔离。
-- 路径必须复用安全 `bookId` 和 `safeChildPath` 规则。
-- 商业状态使用严格 Schema 和原子替换。
-- 书级状态转换必须受锁保护。
-- 不提交测试小说、数据库、日志、缓存、密钥、Cookie 或 `.env`。
-- 不保存完整模型请求或响应到商业状态。
-- 不把人工审核结果写成故事事实。
-- 不对损坏配置静默重建或覆盖。
+- 状态文件使用严格 v1 Schema 和原子替换。
+- 状态转换受书级锁和 `runId` 校验保护。
+- 不提交小说正文、数据库、日志、Secrets、Cookie 或 `.env`。
+- 损坏状态不得静默覆盖。
+- `tokenUsage` 只在结果中透传。
 
-## 13. 回滚方案
+## 14. 回滚方案
 
-- 回滚 TASK-003 新增的策略解析、商业状态、薄编排和最小入口。
-- 保留 TASK-002 的 `BookStrategyStore` 和 `book-strategy.json`。
-- 停止调用商业入口后，原版 InkOS Runner 继续按原行为工作。
-- 备份后可删除 TASK-003 新增的商业策略和状态文件。
-- 不迁移、不恢复或删除故事权威状态和故事 SQLite。
-- 未通过 Claude Code 审查和人工验收不得合并 `develop`。
+- TASK-003A 和 TASK-003B 可以分别回滚。
+- 回滚 TASK-003B 不影响 TASK-003A 状态读取。
+- 回滚 TASK-003A 前先停用 TASK-003B。
+- 保留 TASK-002 的 `book-strategy.json`。
+- 商业状态文件备份后可删除。
+- 不回滚或迁移故事权威状态。
 
-## 14. 非目标
+## 15. 非目标
 
-本任务不实现：
-
-- 模型路由
-- 不同模型自动选择
-- 模型价格表
-- 完整 Token 和费用账本
-- 市场选题
-- 商业总编
-- 多读者模拟
-- 真实评论反馈
+- 模型路由和自动模型选择
+- 模型价格、Token 和费用账本
+- 外层自动重试和幂等重放
+- daemon、CLI、Studio、Scheduler 全局入口治理
+- 自动恢复和自动执行修订请求
+- 自动发布和平台账号管理
 - 多书并行
-- 自动发布
-- 平台账号管理
+- 市场选题、商业总编、读者模拟和真实评论
 - `flagship` 深度策略
-- Studio 大规模界面改造
 - 核心 Prompt 重写
-- Scheduler 全面改造
-- 大规模重构 InkOS 核心
 
-## 15. 交付物
+## 16. 交付物
 
 当前设计轮：
 
-- `docs/modules/volume-production-strategy.md`
-- `docs/tasks/TASK-003-volume-production-strategy.md`
-- 更新后的 `docs/PROJECT-STATUS.md`
-- 更新后的 `docs/tasks/TASK-INDEX.md`
-- TASK-003 文档分支、提交和远程分支
-- Claude Code 设计审查待办
+- 修订后的模块设计
+- 修订后的 TASK-003 总任务
+- TASK-003A 任务单
+- TASK-003B 任务单
+- 项目状态和任务索引
+- 设计修订提交和远程分支
 
-设计批准后的实现轮：
+实现轮交付物由子任务单分别约束。
 
-- Production Policy Resolver
-- Volume Production Orchestrator
-- 独立商业生产状态
-- 最小商业入口
-- 自动测试和人工验收记录
+## 17. 实际结果
 
-## 16. 实际结果
+> TASK-003A 和 TASK-003B 完成后填写。
 
-> 实现阶段填写，当前留空。
+- TASK-003A Commit：
+- TASK-003A 测试：
+- TASK-003B Commit：
+- TASK-003B 测试：
+- 总体验收：
 
-- 修改文件：
-- 实现接口：
-- 测试结果：
-- Commit：
-- 远程分支：
-- 审查结果：
+## 18. 遗留问题
 
-## 17. 遗留问题
-
-> 实现和审查阶段填写，当前留空。
+> 实现和复审阶段填写。
 
 - Blocker：
 - Major：
 - Minor：
 - Suggestion：
 
-## 18. 待用户确认的业务参数
-
-1. 走量模式每章目标字数。
-2. 允许字数偏差，以及使用绝对字数还是百分比。
-3. 最多自动修订次数。
-4. 是否每章都必须人工审核。
-5. 人工审核可能有哪些结果。
-6. 审查为 warning 时是否允许人工通过。
-7. 哪些错误可以自动重试。
-8. 最大自动重试次数。
-9. 单次运行失败后暂停当前章还是停止整本书。
-10. `flagship` 保持原版行为还是返回“策略尚未实现”。
-11. 单章运行超时时间。
-12. 商业策略文件缺失时拒绝运行还是使用经批准默认值。
-
 ## 19. 最终状态
 
 `pending_design_review`
 
-下一步：Claude Code 审查 TASK-003 设计。
+下一步：Claude Code 重新审查 TASK-003 设计。
