@@ -112,11 +112,11 @@ PipelineRunner.writeNextChapter(bookId, wordCount?, temperatureOverride?)
 
 1. `StateManager.acquireBookLock(bookId)` 获取书级写锁。
 2. 加载书籍配置，检查待修复的 `state-degraded`，计算下一章编号。
-3. `PlannerAgent.planChapter` 生成章节意图和规划备忘。
-4. 保存规划，组合 `ContextPackage`、`RuleStack` 等受治理输入。
+3. 默认 `inputGovernanceMode = "v2"` 时，`prepareWriteInput` 进入 `resolveGovernedPlan`：没有新上下文且已有持久化规划时复用 `loadPersistedPlan`；否则调用 `PlannerAgent.planChapter` 并保存规划。`legacy` 模式跳过该受治理规划链。
+4. v2 模式由 `ComposerAgent`/`composeGovernedChapter` 组合 `ContextPackage`、`RuleStack` 等受治理输入。
 5. 根据 `wordCount ?? book.chapterWordCount` 调用 `buildLengthSpec`。
 6. `WriterAgent.writeChapter` 生成正文和候选故事状态更新。
-7. 自动模式运行 `runChapterReviewCycle`，完成审查、有限修订和重新审查。
+7. 自动模式运行 `runChapterReviewCycle`，Runner 将 `PipelineConfig.writingReviewRetries` 作为 `maxReviewIterations` 传入，完成审查、有限修订、重新审查和最佳快照选择。
 8. 生成最终真相文件并由 `StateValidatorAgent` 校验。
 9. `persistChapterArtifacts` 保存章节、索引、故事状态、快照和 SQLite 记忆投影。
 10. 返回 `ready-for-review`、`audit-failed` 或 `state-degraded`。
@@ -141,8 +141,71 @@ TASK-003 不得拆开调用 Planner、Writer、Auditor 和 Reviser，也不得�
 - 故事状态校验失败后只执行一次 settlement 重试，再失败则 `state-degraded`。
 - SQLite busy 使用 0、25、75 ms 三次有限尝试。
 - Provider 瞬时错误为初始调用加最多 2 次重试。
-- Runner 支持 `AbortSignal`，但当前没有统一业务超时值。
+- `writeNextChapter` 本身不接收 `AbortSignal`；Runner 提供公共实例方法 `runWithAbortSignal(signal, task)`，但当前没有统一业务超时值。
 - `ChapterPipelineResult` 可包含 `tokenUsage`，但没有成本账本。
+### 4.4 `ChapterPipelineResult` 的真实数据边界
+
+公开返回类型包含：
+
+```typescript
+interface ChapterPipelineResult {
+  readonly chapterNumber: number;
+  readonly title: string;
+  readonly wordCount: number;
+  readonly auditResult: AuditResult;
+  readonly revised: boolean;
+  readonly status: "ready-for-review" | "audit-failed" | "state-degraded";
+  readonly lengthWarnings?: ReadonlyArray<string>;
+  readonly lengthTelemetry?: LengthTelemetry;
+  readonly tokenUsage?: TokenUsageSummary;
+}
+```
+
+商业层取值规则冻结如下：
+
+| 商业值 | 真实来源 | 取值方式 |
+| --- | --- | --- |
+| `actualChapterNumber` | `result.chapterNumber` | 直接读取，不假设存在同名 Runner 字段 |
+| `pipelineStatus` | `result.status` | 直接读取 |
+| 最终字数 | `result.wordCount` | 直接读取；这是最终持久化输出的计数 |
+| `parseFailed` | `result.auditResult.parseFailed` | 使用 `=== true` 归一化可选布尔值 |
+| `warningCount` | `result.auditResult.issues` | 统计 `severity === "warning"` |
+| `criticalCount` | `result.auditResult.issues` | 统计 `severity === "critical"` |
+| `warningOnly` | `result.auditResult.issues` | `parseFailed = false`、`warningCount > 0`、`criticalCount = 0`；`info` 不视为阻塞问题 |
+| `tokenUsage` | `result.tokenUsage` | 可选透传，不从 `auditResult.tokenUsage` 重复汇总 |
+
+`warningCount`、`criticalCount` 和 `warningOnly` 不是 Runner 原生字段。TASK-003A 必须用一个纯函数从最终 `auditResult.issues` 派生，不得重新审查、读取内部 `runChapterReviewCycle` 结果或解析 `ChapterMeta.auditIssues` 字符串。
+
+长度门槛使用 `result.wordCount` 对比本次已解析 Policy 的 `softMin/softMax`。`lengthTelemetry` 是可选诊断数据，不作为商业状态正确性的唯一来源。
+
+### 4.5 中止与章节号公开接口
+
+- `PipelineRunner.writeNextChapter(bookId, wordCount?, temperatureOverride?)` 不接收 signal。
+- 正确接入方式是 `runner.runWithAbortSignal(signal, () => runner.writeNextChapter(bookId))`。
+- `runWithAbortSignal` 是导出的 `PipelineRunner` 上的公共实例方法，不是 `packages/core/src/index.ts` 的独立函数导出。
+- signal 通过 `AsyncLocalStorage` 注入 `AgentContext.signal`，再传到 Provider；Runner 也在关键阶段调用 `throwIfOperationAborted`。
+- 运行前下一章号读取 `StateManager.getNextChapterNumber(bookId)`；该公开方法会基于 durable artifacts 计算进度，并 bootstrap 缺失的结构化故事状态，因此不是无副作用查询。
+- 运行后的实际章节号只能从 `ChapterPipelineResult.chapterNumber` 获取。也可通过 `PipelineRunner.getBookStatus(bookId).nextChapter` 获取下一章概览，但它内部仍调用同一个 StateManager 方法。
+
+### 4.6 15 项源码事实复核矩阵
+
+| # | 结论 | 主要证据 |
+| --- | --- | --- |
+| 1 | 部分真：签名和总链路正确；v2 规划可能复用已落盘 plan，legacy 会跳过 Planner/Composer | `pipeline/runner.ts:1665-1727, 1761-1825, 1946-2096, 2962-2987, 3643-3670` |
+| 2 | 真：结果含 status、tokenUsage、chapterNumber、wordCount、完整 AuditResult；计数需派生 | `pipeline/runner.ts:288-304, 2086-2096`；`agents/continuity.ts:18-31` |
+| 3 | 真：默认 1 轮，parseFailed 跳过修订，存在最佳快照；配置由 Runner 传入 | `pipeline/chapter-review-cycle.ts:33, 206-235, 238-350`；`pipeline/runner.ts:1822` |
+| 4 | 真：LengthSpec 有 soft/hard 区间；3000 的 softDelta 为 floor(3000*300/2200)=409 | `models/length-governance.ts:9-19`；`utils/length-metrics.ts:46-70` |
+| 5 | 真：auto/manual 存在，书级覆盖项目级；Runner 默认 auto | `models/project.ts:96-100`；`models/book.ts:76-88`；`pipeline/runner.ts:257-269, 1761` |
+| 6 | 真：书锁为 `.write.lock`，冲突抛 `BOOK_BUSY` | `state/manager.ts:30-44, 136-219` |
+| 7 | 部分真：公共中止包装存在，但 writeNextChapter 无 signal 参数且无统一业务超时 | `pipeline/runner.ts:424-440, 666-676, 1665`；`agents/base.ts:28-36` |
+| 8 | 真：Planner 3 次+fallback、空正文失败、settlement 单次恢复、SQLite 三次、Provider 最多重试 2 次 | `agents/planner.ts:55, 243-276`；`pipeline/runner.ts:3135-3137, 3327-3340`；`pipeline/chapter-state-recovery.ts:47-108`；`llm/provider.ts:34, 593-615` |
+| 9 | 真：CLI 有多章/auto，Scheduler 可多书并行并再次调用 Runner | `cli/commands/write.ts:23-64`；`cli/commands/auto.ts:15-86`；`pipeline/scheduler.ts:10-23, 172-259` |
+| 10 | 真：三个原子入口存在；revisionGate 只控制手动 reviseDraft 是否应用候选修订 | `pipeline/runner.ts:1067-1200, 1253-1310, 1313-1515` |
+| 11 | 真：TASK-002 Store、类型和模式常量均存在 | `commercial/book-strategy.ts:9-43, 96-112, 189-255` |
+| 12 | 真：ChapterMeta 状态含 approved/rejected/published；现有审核命令会改 ChapterMeta，reject 默认可回滚故事 | `models/chapter.ts:4-42`；`cli/commands/review.ts:108-240` |
+| 13 | 真：运行后用 result.chapterNumber；运行前可用 StateManager.getNextChapterNumber | `pipeline/runner.ts:294-304, 2086-2096`；`state/manager.ts:441-452` |
+| 14 | 部分真：最终字数/status/token/parseFailed 可直接读取，warning/critical/warningOnly 必须从 issues 派生 | 同第 2 项；本节 4.4 固定适配规则 |
+| 15 | 部分真：根导出 Runner、Store、StateManager、buildLengthSpec 和相关类型；runWithAbortSignal 仅是 Runner 方法，review cycle 未根导出 | `index.ts:202-218, 448, 489, 516-523`；`pipeline/runner.ts:424-433` |
 
 ## 5. 当前可复用能力
 
@@ -150,14 +213,16 @@ TASK-003 不得拆开调用 Planner、Writer、Auditor 和 Reviser，也不得�
 | --- | --- | --- |
 | 模式 | `BookStrategyStore.load` | Resolver 唯一模式来源 |
 | 单章管线 | `PipelineRunner.writeNextChapter` | TASK-003B 每次恰好调用一次 |
-| 自动审查 | `chapterReviewMode: "auto"` | 走量商业入口固定启用 |
-| 修订上限 | `writing.reviewRetries` | 解析为 `maxAutoRevisions`，默认 1 |
+| 自动审查 | `PipelineConfig.chapterReviewMode: "auto"` | 走量商业 Runner 工厂固定覆盖为 auto |
+| 修订上限 | `ProjectConfig.writing.reviewRetries` -> `PipelineConfig.writingReviewRetries` | 解析为 `maxAutoRevisions` 并传给现有 review cycle，默认 1 |
 | 目标字数 | `BookConfig.chapterWordCount` | 不新增走量专属目标 |
 | 长度范围 | `buildLengthSpec` | 软区间作为商业门槛 |
-| 中止 | `runWithAbortSignal` | 实现 60 分钟超时 |
+| 中止 | `PipelineRunner.runWithAbortSignal` 公共实例方法 | 包裹一次 `writeNextChapter` 实现 60 分钟超时 |
 | 书级锁 | `StateManager.acquireBookLock` | 保护商业状态短事务和 Runner 落盘 |
 | 状态降级 | `state-degraded` | 映射为商业暂停 |
 | Token 摘要 | `ChapterPipelineResult.tokenUsage` | 只在调用结果中透传 |
+| 审查摘要 | `ChapterPipelineResult.auditResult` | 纯计算 warning/critical/warningOnly，不重复审查 |
+| 章节号 | `StateManager.getNextChapterNumber` / `ChapterPipelineResult.chapterNumber` | 分别作为运行前 expected 和运行后 actual |
 
 ## 6. 候选走量策略结论
 
@@ -377,6 +442,17 @@ export interface VolumeProductionPolicyV1 {
 | `flagship` | 抛出 `PRODUCTION_POLICY_NOT_IMPLEMENTED` |
 
 `flagship` 的原始 InkOS Runner 行为不变。只有商业入口拒绝执行未实现策略。
+### 11.4 Resolver 的真实配置读取
+
+TASK-003A 采用带 `projectRoot` 的 Resolver。生产组合必须：
+
+1. 调用 `BookStrategyStore.load(bookId)` 取得唯一 `productionMode`。
+2. 调用 `StateManager.loadBookConfig(bookId)` 取得 `chapterWordCount`。
+3. 调用 `loadProjectConfig(projectRoot, { requireApiKey: false })` 取得经现有 Schema 默认化的 `writing.reviewRetries`；策略解析本身不得要求模型凭证。
+4. 调用 `buildLengthSpec(book.chapterWordCount)` 取得数值软区间。soft bounds 的公式与 language 无关；Policy 不复制 `countingMode`，实际计数以 Runner 返回的 `result.wordCount` 为准。
+5. 不直接读写 `book-strategy.json`、`book.json` 或 `inkos.json`。
+
+Resolver 允许注入上述 loader 以进行纯单元测试，但生产默认实现必须真实复用这些现有接口。
 
 ## 12. 商业状态 v1 Schema 和状态机
 
@@ -424,6 +500,14 @@ export interface VolumeAuditGateV1 {
   readonly criticalCount: number;
   readonly warningOnly: boolean;
 }
+
+export interface VolumePipelineObservationV1 {
+  readonly actualChapterNumber: number;
+  readonly auditGate: VolumeAuditGateV1;
+  readonly lengthGate: VolumeLengthGateV1;
+}
+
+该 Observation 是从 `ChapterPipelineResult` 纯计算出的瞬时值。它不包含 `tokenUsage`，持久化 run 只复制其中的章节号和 gate 摘要。
 
 export interface VolumeProductionRunV1 {
   readonly runId: string;
@@ -505,13 +589,24 @@ awaiting_manual_review -> revision_requested
 
 恢复、重新修订和发布属于后续显式任务。
 
-### 12.5 Pipeline 到商业状态映射
+### 12.5 Pipeline 结果归一化与商业状态映射
 
-按以下顺序匹配，靠前规则优先：
+`summarizeChapterPipelineResult` 必须只消费公开 `ChapterPipelineResult`：
+
+- `actualChapterNumber = result.chapterNumber`
+- `lengthGate.actual = result.wordCount`，范围来自已解析 Policy
+- `parseFailed = result.auditResult.parseFailed === true`
+- warning/critical 计数逐项统计最终 `result.auditResult.issues`
+- `warningOnly` 表示至少一个 warning、没有 critical、没有 parse failure；info 可共存
+- 不读取 `runChapterReviewCycle` 内部返回值，不重新调用 Auditor，不解析落盘字符串
+
+归一化后按以下顺序匹配，靠前规则优先：
 
 | 条件 | 商业状态 | 停止原因 |
 | --- | --- | --- |
-| 超时、取消、模型异常、上下文超限或调用抛错 | `paused` | 对应稳定错误码 |
+| 超时 | `paused` | `PRODUCTION_TIMEOUT` |
+| 人工取消 | `paused` | `PRODUCTION_ABORTED` |
+| 其他 Runner 抛错，包括 Provider、上下文上限和 `BOOK_BUSY` | `paused` | `PRODUCTION_PIPELINE_FAILED`；保留 cause，不解析错误文本分类 |
 | 返回章节号不等于运行前 `expectedChapterNumber` | `paused` | `CHAPTER_NUMBER_MISMATCH` |
 | `pipelineStatus = state-degraded` | `paused` | `STATE_DEGRADED` |
 | `parseFailed = true` | `paused` | `AUDIT_PARSE_FAILED` |
@@ -528,7 +623,14 @@ awaiting_manual_review -> revision_requested
 ### 13.1 TASK-003A
 
 ```typescript
-resolveProductionPolicy(bookId: string): Promise<VolumeProductionPolicyV1>;
+class VolumeProductionPolicyResolver {
+  resolve(bookId: string): Promise<VolumeProductionPolicyV1>;
+}
+
+summarizeChapterPipelineResult(
+  result: ChapterPipelineResult,
+  policy: VolumeProductionPolicyV1,
+): VolumePipelineObservationV1;
 
 loadVolumeProductionState(bookId: string): Promise<VolumeProductionStateV1>;
 
@@ -542,6 +644,8 @@ releaseEligible(
   chapterNumber: number,
 ): Promise<boolean>;
 ```
+
+`summarizeChapterPipelineResult` 不执行 Runner，也不持久化 `result.tokenUsage`。TASK-003B 从原始 result 单独透传可选 token 摘要。
 
 ### 13.2 TASK-003B
 
@@ -628,11 +732,11 @@ TASK-003B 的 `reviewChapter`：
 
 ## 15. 自动审查和修订
 
-1. Orchestrator 固定使用 `chapterReviewMode: "auto"`。
-2. 自动审查完全由 `runChapterReviewCycle` 完成。
-3. 修订上限读取 `writing.reviewRetries`，缺省解析为 1。
+1. TASK-003B 的 Runner 工厂从调用方提供的基础 `PipelineConfig` 构造新实例，并强制覆盖 `chapterReviewMode: "auto"`。
+2. 同一工厂把 Policy 的 `maxAutoRevisions` 写入 `PipelineConfig.writingReviewRetries`；该值来自 `ProjectConfig.writing.reviewRetries`，默认 1。
+3. 自动审查完全由 Runner 内部 `runChapterReviewCycle` 完成；商业层不得导入或调用该未根导出的内部函数。
 4. 每轮修订后沿用现有重新审查和最佳快照选择。
-5. `parseFailed` 直接映射商业暂停。
+5. `parseFailed` 从 `result.auditResult.parseFailed === true` 取得并直接映射商业暂停。
 6. 达到修订上限后不从商业层重新调用完整管线。
 7. `revisionGate` 只属于现有 `reviseDraft`，不参与走量自动修订上限。
 
@@ -676,18 +780,28 @@ failureAction = "pause_book";
 
 Provider 内部重试不是商业完整管线重试。TASK-003 不根据异常重新调用 `writeNextChapter`。
 
+超时接入不得假设 `writeNextChapter` 接收 signal。Orchestrator 在调用 Runner 前创建内部 `AbortController`，把用户 signal 转发到该 controller，设置 3,600,000 ms timer，然后执行：
+
+```typescript
+runner.runWithAbortSignal(controller.signal, () =>
+  runner.writeNextChapter(bookId),
+);
+```
+
+`finally` 必须清理 timer 和用户 signal listener。由 timer 触发时记录 `PRODUCTION_TIMEOUT`，由调用者 signal 触发时记录 `PRODUCTION_ABORTED`；其余异常统一为 `PRODUCTION_PIPELINE_FAILED` 并保留 cause，不通过错误消息猜测 Provider 或上下文错误类型。
+
 ## 18. 并发边界
 
 TASK-003 保证的是“同书商业入口互斥”，不是全局禁止所有原始 InkOS 入口。
 
 流程：
 
-1. 在书级锁保护下确认 `bookProductionStatus = active` 且无 `activeRun`。
-2. 读取运行前 `expectedChapterNumber`。
-3. 写入 `activeRun` 和 `running`，释放锁。
-4. 再次读取 next chapter；不一致则暂停且不调用 Runner。
-5. 调用一次 `writeNextChapter`，由 Runner 自己获取书级锁。
-6. 返回后核对 `actualChapterNumber` 和 `expectedChapterNumber`。
+1. 通过 `StateManager.getNextChapterNumber(bookId)` 读取运行前 `expectedChapterNumber`；接受其现有 structured-state bootstrap 副作用。
+2. 在商业 State Store 的短书级锁事务中确认 `bookProductionStatus = active` 且无 `activeRun`。
+3. 写入携带 expected 的 `activeRun` 和 `running`，释放锁。
+4. 再次调用 `getNextChapterNumber`；不一致则暂停且不调用 Runner。
+5. 通过 `runWithAbortSignal` 包裹一次 `writeNextChapter`，由 Runner 自己获取书级锁。
+6. 返回后令 `actualChapterNumber = result.chapterNumber`，核对 actual 与 expected。
 7. 在书级锁保护下按 `runId` 完成商业状态转换。
 
 第二个商业请求看到 `activeRun` 时返回 `PRODUCTION_ALREADY_RUNNING`。
@@ -769,34 +883,40 @@ type VolumeProductionErrorCode =
 1. 无 `book-strategy.json` 时解析默认 `volume`。
 2. 显式 `volume` 解析冻结策略。
 3. `flagship` 明确返回未实现。
-4. 目标字数来自 `chapterWordCount`。
-5. 修订上限来自 `writing.reviewRetries`，默认 1。
-6. 超时、人工审核、外层重试和失败动作均为冻结值。
-7. 状态文件 v1 Schema 校验。
-8. 每章记录、runs 和 reviews 基数校验。
-9. 两书隔离。
-10. 原子写入失败不破坏旧文件。
-11. stale `runId` 不覆盖当前状态。
-12. 非法状态转换被拒绝。
-13. Pipeline 映射表逐项覆盖。
-14. `releaseEligible` 真值表逐项覆盖。
-15. 商业状态不含正文或 `tokenUsage`。
+4. Resolver 真实使用 BookStrategyStore、StateManager book loader 和无凭证项目配置 loader。
+5. 目标字数来自 `chapterWordCount`。
+6. 修订上限来自 `writing.reviewRetries`，默认 1。
+7. 3000 目标解析为 2591-3409 软区间。
+8. 超时、人工审核、外层重试和失败动作均为冻结值。
+9. 状态文件 v1 Schema 校验。
+10. 每章记录、runs 和 reviews 基数校验。
+11. 两书隔离。
+12. 原子写入失败不破坏旧文件。
+13. stale `runId` 不覆盖当前状态。
+14. 非法状态转换被拒绝。
+15. `ChapterPipelineResult` 直接字段和派生审查计数逐项覆盖。
+16. 可选 `parseFailed` 缺失时归一化为 false；info 不破坏 warningOnly。
+17. `releaseEligible` 真值表逐项覆盖。
+18. 商业状态不含正文或 `tokenUsage`。
 
 ### 22.2 TASK-003B
 
 1. 每次商业运行恰好调用一次 Runner。
-2. 强制自动审查。
+2. Runner 工厂强制 `chapterReviewMode: "auto"` 和 Policy 的 `writingReviewRetries`。
 3. 完整管线异常不进行商业重试。
-4. 60 分钟超时使用 AbortSignal。
-5. 运行前 next chapter 不一致时不调用 Runner。
-6. 运行后章节号不一致时暂停。
-7. 同书商业入口并发只有一个调用 Runner。
-8. `ready-for-review` 映射到待人工审核。
-9. warning-only `audit-failed` 可进入人工审核。
-10. critical、parseFailed、字数越界、state-degraded 均暂停。
-11. 三种人工决定只写 commercial 状态。
-12. 不调用现有 review 命令或修改 `ChapterMeta.status`。
-13. `tokenUsage` 只在结果中透传。
+4. 60 分钟 timer 通过 Runner 公共 `runWithAbortSignal` 方法中止。
+5. 用户 signal 与 timer 均清理 listener/timer，并映射为不同错误码。
+6. 运行前 `StateManager.getNextChapterNumber` 变化时不调用 Runner。
+7. 运行后使用 `result.chapterNumber` 检出不匹配并暂停。
+8. 同书商业入口并发只有一个调用 Runner。
+9. `ready-for-review` 映射到待人工审核。
+10. 从 `auditResult.issues` 派生的 warning-only `audit-failed` 可进入人工审核。
+11. critical、parseFailed、字数越界、state-degraded 均暂停。
+12. 其他 Runner 异常统一暂停且不解析错误文本。
+13. 三种人工决定只写 commercial 状态。
+14. 不调用现有 review 命令或修改 `ChapterMeta.status`。
+15. `tokenUsage` 只从 `result.tokenUsage` 透传。
+16. 不导入或调用内部 `runChapterReviewCycle`。
 
 ### 22.3 回归
 

@@ -9,6 +9,7 @@
 - 前置依赖：TASK-002；TASK-003 设计复审通过
 - 建议实现分支：`feature/TASK-003A-volume-policy-state`
 - 模块设计：`docs/modules/volume-production-strategy.md`
+- 源码事实复核：2026-07-16，公开结果字段和配置读取链已核对
 
 ## 2. 目标
 
@@ -18,7 +19,7 @@
 4. 实现 `VolumeProductionStateV1` 严格 Schema。
 5. 按章节保存追加式 runs 和 reviews 历史。
 6. 实现原子、安全、按书隔离的 State Store。
-7. 实现 Pipeline 结果映射纯函数。
+7. 实现 `ChapterPipelineResult` 公开字段归一化和 Pipeline 结果映射纯函数。
 8. 实现 `isReleaseEligible` 纯函数和 `releaseEligible(bookId, chapterNumber)` Store API。
 9. 不调用 Runner、LLM 或现有 review 命令。
 
@@ -58,7 +59,7 @@
 
 ### FR-A01 Policy Resolver
 
-调用 `BookStrategyStore.load`，解析冻结策略，不读取新的商业策略文件。
+生产默认 Resolver 必须调用 `BookStrategyStore.load`、`StateManager.loadBookConfig` 和 `loadProjectConfig(projectRoot, { requireApiKey: false })`，再调用 `buildLengthSpec` 解析冻结策略；允许注入 loader 测试，但不得直接读取新的商业策略文件。
 
 ### FR-A02 State v1
 
@@ -88,7 +89,7 @@ books/<bookId>/commercial/volume-production-state.json
 
 ### FR-A06 映射
 
-实现 Pipeline 状态、parseFailed、critical、warning、字数和章节号到商业状态的确定性映射。
+实现 `summarizeChapterPipelineResult(result, policy)` 纯函数：章节号、status、最终字数直接读取 `result`；`parseFailed` 用 `=== true` 归一化；warning/critical/warningOnly 从最终 `result.auditResult.issues` 派生。不得重新审查、读取内部 review cycle 返回或解析 `ChapterMeta.auditIssues` 字符串。
 
 ### FR-A07 发布资格
 
@@ -103,15 +104,17 @@ books/<bookId>/commercial/volume-production-state.json
 1. 默认 `volume` 返回冻结策略。
 2. 显式 `volume` 返回同一策略。
 3. `flagship` 明确失败。
-4. 无额外商业策略文件。
-5. v1 Schema 拒绝未知字段和非法基数。
-6. 两本书状态隔离。
-7. 原子写失败保留旧文件。
-8. stale runId 不能覆盖 activeRun。
-9. 映射表全部分支可自动断言。
-10. `releaseEligible` 真值表全部覆盖。
-11. 状态文件不含 tokenUsage、正文或故事数据。
-12. 原版 TASK-002 测试继续通过。
+4. Resolver 真实复用 BookStrategyStore、现有 book/project config loader 和 buildLengthSpec。
+5. 策略解析不要求模型凭证且不新增商业策略文件。
+6. v1 Schema 拒绝未知字段和非法基数。
+7. 两本书状态隔离。
+8. 原子写失败保留旧文件。
+9. stale runId 不能覆盖 activeRun。
+10. 直接字段与派生审查计数全部可自动断言。
+11. 可选 parseFailed 缺失归一化为 false，info 可与 warning-only 共存。
+12. `releaseEligible` 真值表全部覆盖。
+13. 状态文件不含 tokenUsage、正文或故事数据。
+14. 原版 TASK-002 测试继续通过。
 
 ## 8. 自动测试
 
@@ -119,21 +122,25 @@ books/<bookId>/commercial/volume-production-state.json
 
 1. 默认/显式 volume
 2. flagship
-3. 目标和修订配置解析
-4. 固定超时、重试、人工审核和失败动作
-5. 状态文件不存在
-6. 合法 v1 读写
-7. JSON 损坏
-8. Schema 非法
-9. bookId 不匹配
-10. 两书隔离
-11. 原子失败
-12. 非法状态转换
-13. activeRun 冲突
-14. run/review 追加历史
-15. Pipeline 映射表
-16. releaseEligible 真值表
-17. 数据边界
+3. 三个现有 loader 与 buildLengthSpec 的 Resolver 组合
+4. 目标和修订配置解析
+5. 3000 目标解析为 2591-3409 软区间
+6. 固定超时、重试、人工审核和失败动作
+7. 状态文件不存在
+8. 合法 v1 读写
+9. JSON 损坏
+10. Schema 非法
+11. bookId 不匹配
+12. 两书隔离
+13. 原子失败
+14. 非法状态转换
+15. activeRun 冲突
+16. run/review 追加历史
+17. ChapterPipelineResult 直接字段适配
+18. warning/critical/warningOnly 派生与可选 parseFailed
+19. Pipeline 映射表
+20. releaseEligible 真值表
+21. 数据边界
 
 ## 9. 数据安全与回滚
 

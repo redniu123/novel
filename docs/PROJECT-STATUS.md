@@ -7,7 +7,7 @@
 | 项目 | 当前值 |
 | --- | --- |
 | 项目名称 | 基于 InkOS 的小说智能体 |
-| 当前阶段 | TASK-003 首轮设计审查被拒后已完成参数冻结、状态 Schema 补全和任务拆分，等待重新审查 |
+| 当前阶段 | TASK-003 已完成参数冻结、任务拆分和 15 项源码事实复核修订，等待设计复审 |
 | InkOS 版本 | 1.7.0 |
 | 基线 Commit | `7ac8d530557154653cdac83c07dd7488c1460191` |
 | 远程默认稳定分支 | `origin/master` |
@@ -24,6 +24,7 @@
 - 当前子任务：TASK-003A（走量策略与商业状态 Schema）`pending_design_review`。
 - 后续子任务：TASK-003B（走量单章薄编排器）`pending`，依赖 TASK-003A。
 - 2026-07-16：TASK-003 首轮设计审查结论为 `rejected`；用户已确认 1-12 全部推荐参数并批准拆分，文档已按 Blocker/Major/Minor/Suggestion 修订。
+- 2026-07-16：进一步核对 Runner、审查循环、长度治理、Abort、状态、CLI/Scheduler 和根导出；文档已明确直接字段与派生字段、真实配置链和公共接入方式。
 - 下一步：Claude Code 重新审查 TASK-003 设计。
 
 任务明细见 [TASK 索引](tasks/TASK-INDEX.md)。
@@ -57,7 +58,7 @@
 - TASK-001C 为纯文档任务，DOCX 已重新生成并完成逐页渲染检查。
 - TASK-002 新增 16 项 production mode 测试；固定 Node 24.14.0、pnpm 9.15.9 下 typecheck、test、build 均通过。
 - TASK-002 验收：2026-07-15 基于 `pnpm build` 产物在隔离临时目录完成 9 项手动验收检查（默认值、落盘持久化、书籍隔离、非法值、损坏文件、路径穿越、故事状态不受影响），全部通过。
-- TASK-003 本轮仍为纯文档设计修订，未运行功能测试。
+- TASK-003 本轮仍为纯文档设计修订；完成 15 项源码事实静态核对和 Markdown 一致性检查，未运行功能测试。
 
 详见 [InkOS 基线分析](02-inkos-baseline.md)。
 

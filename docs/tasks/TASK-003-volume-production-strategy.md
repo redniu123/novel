@@ -12,6 +12,7 @@
 - 模块设计：`docs/modules/volume-production-strategy.md`
 - 首轮设计审查：`rejected`
 - 审查修订日期：2026-07-16
+- 源码事实复核：2026-07-16，15 项 InkOS 接口与返回数据已逐项核对
 - 下一步：Claude Code 重新审查 TASK-003 设计
 
 本任务是 TASK-003A 和 TASK-003B 的总任务，不在一个实现轮同时交付全部代码。
@@ -24,6 +25,8 @@ TASK-002 已提供按书隔离的 `productionMode`，但模式尚未接入章节
 
 - TASK-003A：参数、Policy Schema、商业状态 v1 Schema 和 Store。
 - TASK-003B：薄编排器、单章商业入口和商业人工审核 API。
+
+本轮进一步对照真实源码确认：Runner 公开返回足以支持外置策略，但 warning/critical/warningOnly 必须从 `auditResult.issues` 派生；AbortSignal 必须通过 Runner 公共实例方法包裹；运行前下一章号来自 `StateManager.getNextChapterNumber`。
 
 ## 3. 总目标
 
@@ -76,7 +79,7 @@ TASK-002 已提供按书隔离的 `productionMode`，但模式尚未接入章节
 - `VolumeProductionPolicyV1`
 - `VolumeProductionStateV1`
 - 按章、追加历史的商业状态 Store
-- Pipeline 结果映射纯函数
+- `ChapterPipelineResult` 公开字段归一化与 Pipeline 结果映射纯函数
 - `isReleaseEligible` 纯函数和 `releaseEligible(bookId, chapterNumber)` API
 - 状态转换和数据隔离测试
 
@@ -145,7 +148,7 @@ TASK-003B 每次商业运行恰好调用一次 `writeNextChapter`。
 
 ### FR-003 自动审查和修订
 
-固定自动审查；自动修订只由现有 `writing.reviewRetries` 控制。
+TASK-003B 的 Runner 工厂强制 `PipelineConfig.chapterReviewMode = "auto"`，并把 Policy 的 `maxAutoRevisions` 写入 `PipelineConfig.writingReviewRetries`；商业层不直接调用内部 review cycle。
 
 ### FR-004 商业状态
 
@@ -171,6 +174,10 @@ TASK-003B 每次商业运行恰好调用一次 `writeNextChapter`。
 
 商业状态不保存正文、故事事实、`ChapterMeta.status`、`tokenUsage` 或费用。
 
+### FR-010 公开接入点
+
+只使用根导出的 `PipelineRunner`、`StateManager`、`BookStrategyStore`、`buildLengthSpec` 和相关类型。`runWithAbortSignal` 作为 Runner 公共实例方法使用；不得假设它或 `runChapterReviewCycle` 是独立根导出。
+
 ## 10. 总体验收标准
 
 1. TASK-003A 和 TASK-003B 分别完成审查和验收。
@@ -185,6 +192,8 @@ TASK-003B 每次商业运行恰好调用一次 `writeNextChapter`。
 10. 现有 InkOS review 命令、Runner、Prompt 和模型路由不变。
 11. 商业状态与故事状态完全分离。
 12. 精确测试、typecheck、全量测试和 build 通过。
+13. 最终字数、pipeline status、actual chapter 和 tokenUsage 从 `ChapterPipelineResult` 直接读取；审查计数从最终 `auditResult.issues` 纯计算。
+14. 60 分钟超时通过 `runner.runWithAbortSignal(signal, () => runner.writeNextChapter(bookId))` 接入。
 
 ## 11. 自动测试
 
@@ -202,6 +211,9 @@ TASK-003B 每次商业运行恰好调用一次 `writeNextChapter`。
 - 商业审核边界测试
 - 两书隔离测试
 - 原版 Runner 回归测试
+- `ChapterPipelineResult` 直接字段与派生字段适配测试
+- Runner auto/reviewRetries 工厂配置测试
+- Runner 公共中止包装和 timer/listener 清理测试
 
 ## 12. 人工验收
 

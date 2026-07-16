@@ -9,12 +9,13 @@
 - 前置依赖：TASK-003A `completed`
 - 建议实现分支：`feature/TASK-003B-volume-orchestrator`
 - 模块设计：`docs/modules/volume-production-strategy.md`
+- 源码事实复核：2026-07-16，Runner 配置、中止和章节号接口已核对
 
 ## 2. 目标
 
 1. 实现 Volume Production Orchestrator。
 2. 每次商业运行恰好调用一次 `writeNextChapter`。
-3. 固定自动审查，复用现有自动修订上限。
+3. 通过 Runner 工厂固定自动审查，并显式传入现有自动修订上限。
 4. 实现运行前后章节号一致性检查。
 5. 实现 60 分钟 AbortSignal 超时。
 6. 将 Pipeline 结果写入 TASK-003A 商业状态。
@@ -54,11 +55,11 @@
 
 ### FR-B03 章节号
 
-运行前记录 expected chapter，再次检查无变化后才调用 Runner。返回后 actual 必须等于 expected。
+运行前通过 `StateManager.getNextChapterNumber(bookId)` 记录 expected（接受其现有 structured-state bootstrap 副作用），再次检查无变化后才调用 Runner；返回后令 actual 等于 `result.chapterNumber`，并要求 actual 等于 expected。
 
 ### FR-B04 Runner
 
-使用自动审查配置，每次恰好调用一次 `writeNextChapter`。不得调用独立 Agent 重组管线。
+Runner 工厂从基础 `PipelineConfig` 构造实例，强制覆盖 `chapterReviewMode: "auto"` 和 `writingReviewRetries: policy.maxAutoRevisions`。每次恰好调用一次 `writeNextChapter`，不得调用独立 Agent 或内部 `runChapterReviewCycle` 重组管线。
 
 ### FR-B05 重试
 
@@ -66,11 +67,11 @@
 
 ### FR-B06 超时
 
-使用 `runWithAbortSignal` 和 3,600,000 ms 超时。超时后暂停，不再次调用 Runner。
+`writeNextChapter` 不接收 signal。必须创建内部 AbortController，组合用户 signal 和 3,600,000 ms timer，再调用 Runner 公共实例方法 `runWithAbortSignal(controller.signal, () => runner.writeNextChapter(bookId))`；finally 清理 timer/listener，超时或取消后暂停且不重试。
 
 ### FR-B07 结果映射
 
-使用 TASK-003A 映射纯函数处理 ready、warning-only、critical、parseFailed、字数越界、state-degraded 和异常。
+把公开 `ChapterPipelineResult` 交给 TASK-003A 归一化/映射纯函数，处理 ready、派生 warning-only、critical、可选 parseFailed、最终 wordCount、state-degraded 和章节号；其他抛错统一为 pipeline failed，不解析错误文本分类。
 
 ### FR-B08 商业审核
 
@@ -82,7 +83,7 @@
 
 ### FR-B10 Token
 
-tokenUsage 只在返回结果中透传，不写商业状态。
+tokenUsage 只从 `ChapterPipelineResult.tokenUsage` 可选透传，不从 audit 子结果重复汇总，也不写商业状态。
 
 ## 6. 运行约束
 
@@ -95,42 +96,48 @@ tokenUsage 只在返回结果中透传，不写商业状态。
 
 1. 默认和显式 volume 均可进入薄编排器。
 2. flagship 在 Runner 前失败。
-3. 每次最多调用一次 Runner。
-4. 完整管线异常调用次数仍为 1。
-5. 运行前章节号变化时调用次数为 0。
-6. 返回章节号不匹配时暂停。
-7. 60 分钟超时后暂停且不重试。
-8. 同书两个商业请求只有一个调用 Runner。
-9. ready 和 warning-only 映射待人工审核。
-10. critical、parseFailed、字数越界和 state-degraded 映射暂停。
-11. 三种人工决定只写 commercial 状态。
-12. 未 approve 时 releaseEligible 为 false。
-13. 不调用现有 review 命令。
-14. 原版 Runner、CLI 和 Scheduler 行为不变。
+3. Runner 工厂强制 auto 和 Policy 的 reviewRetries。
+4. 每次最多调用一次 Runner。
+5. 完整管线异常调用次数仍为 1。
+6. 运行前章节号变化时调用次数为 0。
+7. 返回 `result.chapterNumber` 不匹配时暂停。
+8. 60 分钟超时后暂停且不重试。
+9. 用户取消与超时使用不同稳定错误码并清理资源。
+10. 同书两个商业请求只有一个调用 Runner。
+11. ready 和派生 warning-only 映射待人工审核。
+12. critical、parseFailed、字数越界和 state-degraded 映射暂停。
+13. 三种人工决定只写 commercial 状态。
+14. 未 approve 时 releaseEligible 为 false。
+15. 不调用现有 review 命令或内部 review cycle。
+16. 原版 Runner、CLI 和 Scheduler 行为不变。
 
 ## 8. 自动测试
 
 至少覆盖：
 
 1. volume/flagship 分派
-2. 单次 Runner 调用
-3. 零商业重试
-4. 前置章节号变化
-5. 后置章节号不匹配
-6. 60 分钟 fake timer 超时
-7. 用户 AbortSignal
-8. 同书商业并发
-9. 两书隔离
-10. ready 映射
-11. warning-only 映射
-12. critical 映射
-13. parseFailed 映射
-14. 字数越界映射
-15. state-degraded 映射
-16. 三种人工决定
-17. 非法审核转换
-18. tokenUsage 只透传
-19. ChapterMeta 和故事状态不受影响
+2. Runner 工厂 auto/reviewRetries 覆盖
+3. 单次 Runner 调用
+4. 零商业重试
+5. StateManager 前置章节号变化
+6. result.chapterNumber 后置不匹配
+7. 60 分钟 fake timer 超时
+8. 用户 AbortSignal
+9. timer 和 listener 清理
+10. 同书商业并发
+11. 两书隔离
+12. ready 映射
+13. 从 issues 派生 warning-only
+14. critical 映射
+15. parseFailed 映射
+16. 最终 wordCount 越界映射
+17. state-degraded 映射
+18. 其他异常不解析文本
+19. 三种人工决定
+20. 非法审核转换
+21. result.tokenUsage 只透传
+22. ChapterMeta 和故事状态不受影响
+23. 内部 review cycle 从不被调用
 
 ## 9. 人工验收
 
