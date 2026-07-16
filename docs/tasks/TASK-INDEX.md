@@ -9,8 +9,8 @@
 | TASK-001B | 真实模型冒烟验证 | `completed` | `test/TASK-001B-real-model-smoke` | TASK-001A；合法模型凭证 | 冒烟任务单、真实模型结果、用户 Runbook | `openai/custom` 真实链路通过；第 1 章作为验收样本，第 2 章为用户体验范围偏差 |
 | TASK-001C | InkOS 功能教程与缺口指南 | `completed` | `docs/TASK-001C-inkos-guide` | TASK-001、TASK-001A、TASK-001B | 教程 Markdown、DOCX、缺口矩阵 | 已按真实模型结果更新并完成 DOCX 渲染验收 |
 | TASK-002 | 最小 `production_mode` 配置 | `completed` | `feature/TASK-002-production-mode` | TASK-001B；设计文档批准 | TASK 文档、配置设计、实现与测试 | 2026-07-15 Claude Code 审查通过（无 Blocker/Major），代行人工验收 9 项检查通过；已合并 `develop` |
-| TASK-003 | 走量小说生产策略总任务 | `in_progress` | `feature/TASK-003A-volume-policy-state` | TASK-002 | 总体设计、任务拆分、总体验收 | 设计复审 `approved_with_changes`；两项 Major 澄清已收尾，TASK-003A 开始实现 |
-| TASK-003A | 走量策略与商业状态 Schema | `in_progress` | `feature/TASK-003A-volume-policy-state` | TASK-003 设计复审通过 | Policy、State v1、Store、映射和发布资格 | 公开结果适配、配置读取链和 projectRoot 绑定 API 已冻结 |
+| TASK-003 | 走量小说生产策略总任务 | `in_progress` | `feature/TASK-003A-volume-policy-state` | TASK-002 | 总体设计、任务拆分、总体验收 | TASK-003A 已实现待审；TASK-003B 未开始 |
+| TASK-003A | 走量策略与商业状态 Schema | `implemented_pending_review` | `feature/TASK-003A-volume-policy-state` | TASK-003 设计复审通过 | Policy、State v1、Store、映射和发布资格 | 实现完成；typecheck/test/build 通过，等待 Claude Code 审查 |
 | TASK-003B | 走量单章薄编排器 | `pending` | 待创建 | TASK-003A | Orchestrator、商业审核 API、超时和测试 | Runner 工厂/Abort/章节号接入已校正；TASK-003A 完成后启动 |
 
 状态值统一使用：`pending`、`pending_design_review`、`in_progress`、`completed`、`completed_with_blockers`、`blocked`、`failed`、`implemented_pending_review`。

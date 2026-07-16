@@ -4,7 +4,7 @@
 
 - 任务编号：TASK-003A
 - 任务名称：冻结走量策略并实现商业状态 v1 Schema/Store
-- 当前状态：`in_progress`
+- 当前状态：`implemented_pending_review`
 - 总任务：TASK-003
 - 前置依赖：TASK-002；TASK-003 设计复审通过
 - 建议实现分支：`feature/TASK-003A-volume-policy-state`
@@ -162,22 +162,39 @@ books/<bookId>/commercial/volume-production-state.json
 
 ## 11. 实际结果
 
-> 实现后填写。
-
 - 修改文件：
+  - `packages/core/src/commercial/volume-production-policy.ts`
+  - `packages/core/src/commercial/volume-production-state.ts`
+  - `packages/core/src/__tests__/volume-production-policy-state.test.ts`
+  - `packages/core/src/index.ts`
+  - `docs/tasks/TASK-003A-volume-policy-state-schema.md`
+  - `docs/tasks/TASK-003-volume-production-strategy.md`
+  - `docs/modules/volume-production-strategy.md`
+  - `docs/PROJECT-STATUS.md`
+  - `docs/tasks/TASK-INDEX.md`
+- 设计决策：
+  - Policy Resolver 显式绑定 `projectRoot`，生产默认组合复用 `BookStrategyStore`、`StateManager.loadBookConfig`、`loadProjectConfig(projectRoot, { requireApiKey: false })` 和 `buildLengthSpec`。
+  - 商业状态文件固定在 `books/<bookId>/commercial/volume-production-state.json`，严格 v1 Schema，按章节追加 runs/reviews，损坏文件不被默认状态覆盖。
+  - Pipeline 结果映射只消费公开 `ChapterPipelineResult` 字段；warning/critical/warningOnly 从最终 `auditResult.issues` 派生；`tokenUsage`、正文、故事事实和 `ChapterMeta.status` 不写入商业状态。
+  - `index.ts` 仅导出 TASK-003A 类型，避免根导入加载商业状态运行时代码并破坏现有 lazy import 边界；TASK-003B 在 core 内部使用相对路径接入运行时类和函数。
 - 测试：
-- Commit：
-- 审查：
+  - `pnpm --filter @actalk/inkos-core typecheck` 通过。
+  - `pnpm --filter @actalk/inkos-core test -- volume-production-policy-state.test.ts book-strategy.test.ts` 通过，39 tests。
+  - `pnpm typecheck` 通过。
+  - `pnpm test` 通过：core 174 files / 1697 tests；studio 55 files / 484 tests；cli 38 files / 209 tests。
+  - `pnpm build` 通过。
+- Commit：待本实现提交。
+- 审查：待 Claude Code 审查 TASK-003A 实现。
 
 ## 12. 遗留问题
 
-> 实现和审查后填写。
-
-- Blocker：
-- Major：
-- Minor：
-- Suggestion：
+- Blocker：无。
+- Major：待 Claude Code 复审确认。
+- Minor：TASK-003B 仍需按总设计补齐超时 `timeoutFired`/`userAborted` 语义和 fake timer 测试。
+- Suggestion：TASK-003A 复审通过后再创建 TASK-003B 实现分支，不提前接入 Runner、CLI、Studio 或 Scheduler。
 
 ## 13. 最终状态
 
-`in_progress`
+`implemented_pending_review`
+
+下一步：Claude Code 审查 TASK-003A 实现。
