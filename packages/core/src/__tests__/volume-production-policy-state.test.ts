@@ -14,7 +14,6 @@ import {
   VolumeProductionStateError,
   VolumeProductionStateSchema,
   VolumeProductionStateStore,
-  createDefaultVolumeProductionState,
   isReleaseEligible,
   mapVolumePipelineFailure,
   mapVolumePipelineObservation,
@@ -331,17 +330,16 @@ describe("VolumeProductionStateStore", () => {
     await expect(access(statePath("missing-state"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("writes and reads a legal v1 state", async () => {
-    const state = createDefaultVolumeProductionState("legal-book", ISO_1);
-    await store().save("legal-book", state);
+  it("writes and reads a legal v1 state through protected transitions", async () => {
+    const written = await store().startRun({ bookId: "legal-book", runId: "run-1", expectedChapterNumber: 1, startedAt: ISO_1 });
 
-    await expect(store().load("legal-book")).resolves.toEqual(state);
+    await expect(store().load("legal-book")).resolves.toEqual(written);
   });
 
   it("rejects damaged JSON and does not silently overwrite it", async () => {
     await writeStateFile("damaged-state", "{ damaged");
     await expectStateError(store().load("damaged-state"), "PRODUCTION_STATE_INVALID_JSON");
-    await expectStateError(store().save("damaged-state", createDefaultVolumeProductionState("damaged-state", ISO_1)), "PRODUCTION_STATE_INVALID_JSON");
+    await expectStateError(store().startRun({ bookId: "damaged-state", runId: "run-1", expectedChapterNumber: 1, startedAt: ISO_1 }), "PRODUCTION_STATE_INVALID_JSON");
     await expect(readFile(statePath("damaged-state"), "utf-8")).resolves.toBe("{ damaged");
   });
 
@@ -432,7 +430,7 @@ describe("VolumeProductionStateStore", () => {
       stopReason: "WARNING_OVERRIDE_REQUIRED",
     });
     historical.chapters["1"]!.reviews.push({ runId: "run-2", decision: "approve", decidedAt: ISO_3 });
-    await store().save("book-a", historical);
+    await writeStateFile("book-a", historical);
 
     const loaded = await store().load("book-a");
     expect(loaded.chapters["1"]?.runs.map((run) => run.runId)).toEqual(["run-1", "run-2"]);
@@ -555,7 +553,7 @@ describe("release eligibility", () => {
 
   it("uses the Store API without reading ChapterMeta.status", async () => {
     const stateStore = new VolumeProductionStateStore(projectRoot);
-    await stateStore.save("book-a", eligibleState());
+    await writeStateFile("book-a", eligibleState());
 
     await expect(stateStore.releaseEligible("book-a", 1)).resolves.toBe(true);
   });

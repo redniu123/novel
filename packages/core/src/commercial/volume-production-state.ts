@@ -529,15 +529,6 @@ export class VolumeProductionStateStore {
     return parseStateForBook(paths.bookId, parsedJson);
   }
 
-  async save(bookId: string, state: VolumeProductionStateV1): Promise<VolumeProductionStateV1> {
-    const paths = this.resolvePaths(bookId);
-    const parsed = parseStateForBook(paths.bookId, state);
-    return this.withBookLock(paths.bookId, async () => {
-      await this.load(paths.bookId);
-      await this.writeAtomically(paths, parsed);
-      return parsed;
-    });
-  }
   async startRun(input: StartVolumeProductionRunInput): Promise<VolumeProductionStateV1> {
     return this.updateState(input.bookId, (state, now) => {
       if (state.bookProductionStatus === "paused") {
