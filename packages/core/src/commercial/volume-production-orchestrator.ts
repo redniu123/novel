@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ChapterPipelineResult, PipelineConfig, TokenUsageSummary } from "../pipeline/runner.js";
 import { PipelineRunner } from "../pipeline/runner.js";
 import { StateManager } from "../state/manager.js";
+import type { Logger } from "../utils/logger.js";
 import { VolumeProductionPolicyResolver, type VolumeProductionPolicyV1 } from "./volume-production-policy.js";
 import {
   VolumeProductionStateStore,
@@ -62,6 +63,8 @@ export interface VolumeProductionOrchestratorOptions {
   readonly stateManager?: Pick<StateManager, "getNextChapterNumber">;
   readonly runnerFactory?: VolumePipelineRunnerFactory;
   readonly runIdFactory?: () => string;
+  readonly events?: VolumeProductionEvents;
+  readonly logger?: Pick<Logger, "warn">;
 }
 
 export interface ProduceNextVolumeChapterInput {
@@ -84,6 +87,53 @@ export interface VolumeProductionResult {
   readonly failureCause?: unknown;
 }
 
+export type VolumeProductionSettledResultSnapshot = Omit<VolumeProductionResult, "failureCause">;
+
+export interface VolumeProductionSettledEvent {
+  readonly result: VolumeProductionSettledResultSnapshot;
+}
+
+export interface VolumeProductionEvents {
+  readonly onProductionSettled?: (
+    event: VolumeProductionSettledEvent,
+  ) => void | Promise<void>;
+}
+
+function cloneAndFreezeSnapshot<T>(value: T, seen = new WeakMap<object, object>()): T {
+  if (value === null || typeof value !== "object") return value;
+  const existing = seen.get(value);
+  if (existing !== undefined) return existing as T;
+  if (value instanceof Date) return Object.freeze(new Date(value.getTime())) as T;
+  if (Array.isArray(value)) {
+    const clone: unknown[] = [];
+    seen.set(value, clone);
+    for (const item of value) clone.push(cloneAndFreezeSnapshot(item, seen));
+    return Object.freeze(clone) as T;
+  }
+  const clone: Record<string, unknown> = {};
+  seen.set(value, clone);
+  for (const [key, item] of Object.entries(value)) {
+    clone[key] = cloneAndFreezeSnapshot(item, seen);
+  }
+  return Object.freeze(clone) as T;
+}
+
+function createSettledEvent(result: VolumeProductionResult): VolumeProductionSettledEvent {
+  const snapshot: VolumeProductionSettledResultSnapshot = {
+    runId: result.runId,
+    bookId: result.bookId,
+    ...(result.chapterNumber !== undefined ? { chapterNumber: result.chapterNumber } : {}),
+    productionStatus: result.productionStatus,
+    ...(result.pipelineStatus !== undefined ? { pipelineStatus: result.pipelineStatus } : {}),
+    releaseEligible: result.releaseEligible,
+    ...(result.stopReason !== undefined ? { stopReason: result.stopReason } : {}),
+    ...(result.tokenUsage !== undefined
+      ? { tokenUsage: cloneAndFreezeSnapshot(result.tokenUsage) }
+      : {}),
+  };
+  return Object.freeze({ result: cloneAndFreezeSnapshot(snapshot) });
+}
+
 export class VolumeProductionOrchestrator {
   private readonly projectRoot: string;
   private readonly policyResolver: Pick<VolumeProductionPolicyResolver, "resolve">;
@@ -92,6 +142,8 @@ export class VolumeProductionOrchestrator {
   private readonly runnerFactory: VolumePipelineRunnerFactory;
   private readonly runIdFactory: () => string;
   private readonly basePipelineConfig?: PipelineConfig;
+  private readonly events?: VolumeProductionEvents;
+  private readonly logger: Pick<Logger, "warn">;
 
   constructor(options: VolumeProductionOrchestratorOptions) {
     if (!options.runnerFactory && !options.basePipelineConfig) {
@@ -105,6 +157,12 @@ export class VolumeProductionOrchestrator {
       ?? (({ baseConfig, policy }) => new PipelineRunner(buildVolumePipelineConfig(baseConfig, policy, this.projectRoot)));
     this.basePipelineConfig = options.basePipelineConfig;
     this.runIdFactory = options.runIdFactory ?? randomUUID;
+    this.events = options.events;
+    this.logger = options.logger ?? options.basePipelineConfig?.logger ?? {
+      warn(message, context) {
+        console.warn("[volume-production] " + message, context ?? {});
+      },
+    };
   }
 
   async produceNextChapter(input: ProduceNextVolumeChapterInput): Promise<VolumeProductionResult> {
@@ -125,7 +183,7 @@ export class VolumeProductionOrchestrator {
     // a single Runner call.
     const recheckedChapterNumber = await this.stateManager.getNextChapterNumber(bookId);
     if (recheckedChapterNumber !== expectedChapterNumber) {
-      return this.pause(bookId, runId, expectedChapterNumber, "CHAPTER_NUMBER_MISMATCH");
+      return this.settle(await this.pause(bookId, runId, expectedChapterNumber, "CHAPTER_NUMBER_MISMATCH"));
     }
 
     const runner = this.runnerFactory({
@@ -165,7 +223,15 @@ export class VolumeProductionOrchestrator {
         : userAborted
           ? "PRODUCTION_ABORTED"
           : "PRODUCTION_PIPELINE_FAILED";
-      return this.pause(bookId, runId, expectedChapterNumber, stopReason, stopReason === "PRODUCTION_PIPELINE_FAILED" ? error : undefined);
+      return this.settle(
+        await this.pause(
+          bookId,
+          runId,
+          expectedChapterNumber,
+          stopReason,
+          stopReason === "PRODUCTION_PIPELINE_FAILED" ? error : undefined,
+        ),
+      );
     } finally {
       clearTimeout(timer);
       input.signal?.removeEventListener("abort", onUserAbort);
@@ -178,7 +244,7 @@ export class VolumeProductionOrchestrator {
     await this.stateStore.completeRun({ bookId, runId, observation, observedNextChapterAfterRun });
     const mapping = mapVolumePipelineObservation(observation, expectedChapterNumber);
 
-    return {
+    return this.settle({
       runId,
       bookId,
       chapterNumber: observation.actualChapterNumber,
@@ -189,7 +255,22 @@ export class VolumeProductionOrchestrator {
       ...(mapping.stopReason !== undefined ? { stopReason: mapping.stopReason } : {}),
       // FR-B10: pass-through only, never re-aggregated, never persisted.
       ...(result.tokenUsage !== undefined ? { tokenUsage: result.tokenUsage } : {}),
-    };
+    });
+  }
+
+  private async settle(result: VolumeProductionResult): Promise<VolumeProductionResult> {
+    const handler = this.events?.onProductionSettled;
+    if (handler === undefined) return result;
+    try {
+      await handler(createSettledEvent(result));
+    } catch (error) {
+      this.logger.warn("onProductionSettled failed; production result is unchanged", {
+        bookId: result.bookId,
+        runId: result.runId,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+    }
+    return result;
   }
 
   private async pause(

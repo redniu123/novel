@@ -9,6 +9,7 @@ import {
   VolumeProductionOrchestrator,
   buildVolumePipelineConfig,
   type VolumePipelineRunnerLike,
+  type VolumeProductionSettledEvent,
   type VolumeProductionOrchestratorOptions,
 } from "../commercial/volume-production-orchestrator.js";
 import { VolumeProductionReviewService } from "../commercial/volume-production-review.js";
@@ -21,7 +22,7 @@ import {
   type VolumeProductionStateV1,
 } from "../commercial/volume-production-state.js";
 import type { ChapterPipelineResult, PipelineConfig } from "../pipeline/runner.js";
-import type { StateManager } from "../state/manager.js";
+import { StateManager } from "../state/manager.js";
 
 const ENV_KEYS = [
   "INKOS_LLM_SERVICE",
@@ -508,6 +509,96 @@ describe("pipeline result mapping (FR-B07/FR-B10)", () => {
     expect(withTokens.tokenUsage).toEqual(tokenUsage);
     expect(withoutTokens.tokenUsage).toBeUndefined();
     expect(await readFile(statePath("map-tokens"), "utf-8")).not.toContain("tokenUsage");
+  });
+});
+
+describe("production settled events (TASK-004B)", () => {
+  it("keeps the no-events result shape identical to TASK-003B", async () => {
+    const result = await makeOrchestrator().produceNextChapter({ bookId: "book-a" });
+    expect(result).toEqual({
+      runId: "run-1",
+      bookId: "book-a",
+      chapterNumber: 1,
+      productionStatus: "awaiting_manual_review",
+      pipelineStatus: "ready-for-review",
+      releaseEligible: false,
+    });
+    expect(Object.keys(result).sort()).toEqual([
+      "bookId",
+      "chapterNumber",
+      "pipelineStatus",
+      "productionStatus",
+      "releaseEligible",
+      "runId",
+    ]);
+  });
+
+  it("awaits one deep-frozen independent snapshot after terminal state and lock release", async () => {
+    const usage = {
+      promptTokens: 10,
+      completionTokens: 20,
+      totalTokens: 30,
+      cache: { hits: 2 },
+    };
+    let captured: VolumeProductionSettledEvent | undefined;
+    let callbackCount = 0;
+    const orchestrator = makeOrchestrator({
+      runnerFactory: () => fakeRunner(async () => pipelineResult({ tokenUsage: usage })),
+      events: {
+        onProductionSettled: async (event) => {
+          callbackCount += 1;
+          const state = JSON.parse(await readFile(statePath("book-a"), "utf-8")) as VolumeProductionStateV1;
+          expect(state.activeRun).toBeUndefined();
+          expect(state.chapters["1"]?.currentStatus).toBe("awaiting_manual_review");
+          const release = await new StateManager(projectRoot).acquireBookLock("book-a");
+          await release();
+          expect(Object.isFrozen(event)).toBe(true);
+          expect(Object.isFrozen(event.result)).toBe(true);
+          expect(Object.isFrozen(event.result.tokenUsage)).toBe(true);
+          expect(Object.isFrozen((event.result.tokenUsage as typeof usage).cache)).toBe(true);
+          expect(() => {
+            (event.result as { bookId: string }).bookId = "mutated";
+          }).toThrow();
+          captured = event;
+        },
+      },
+    });
+
+    const result = await orchestrator.produceNextChapter({ bookId: "book-a" });
+    usage.cache.hits = 99;
+    expect(callbackCount).toBe(1);
+    expect(captured?.result).not.toBe(result);
+    expect((captured?.result.tokenUsage as typeof usage).cache.hits).toBe(2);
+  });
+
+  it("emits settled after a paused terminal state", async () => {
+    const events: VolumeProductionSettledEvent[] = [];
+    const result = await makeOrchestrator({
+      stateManager: seqNextChapter([1, 2]),
+      events: { onProductionSettled: (event) => { events.push(event); } },
+    }).produceNextChapter({ bookId: "book-a" });
+
+    expect(result.productionStatus).toBe("paused");
+    expect(events).toHaveLength(1);
+    expect(events[0]?.result.stopReason).toBe("CHAPTER_NUMBER_MISMATCH");
+    const state = JSON.parse(await readFile(statePath("book-a"), "utf-8")) as VolumeProductionStateV1;
+    expect(state.activeRun).toBeUndefined();
+    expect(state.bookProductionStatus).toBe("paused");
+  });
+
+  it("catches callback errors and preserves the production result", async () => {
+    const logger = { warn: vi.fn() };
+    const result = await makeOrchestrator({
+      events: { onProductionSettled: async () => { throw new Error("ledger unavailable"); } },
+      logger,
+    }).produceNextChapter({ bookId: "book-a" });
+
+    expect(result.productionStatus).toBe("awaiting_manual_review");
+    expect(result).not.toHaveProperty("ledgerWriteFailed");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("production result is unchanged"),
+      expect.objectContaining({ bookId: "book-a", runId: "run-1" }),
+    );
   });
 });
 

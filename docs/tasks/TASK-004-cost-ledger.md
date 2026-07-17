@@ -4,9 +4,9 @@
 
 - 任务编号：TASK-004
 - 任务名称：模型成本账本（Cost Ledger）
-- 当前状态：`in_progress`（设计审查通过，004A 实现中）
+- 当前状态：`completed`
 - 前置依赖：TASK-003A `completed`、TASK-003B `completed`（TASK-003 总验收可并行）
-- 建议实现分支：`feature/TASK-004-cost-ledger`
+- 实现分支：`feature/TASK-004-cost-ledger`（004A）、`feature/TASK-004B-ledger-recorder`（004B）
 - 模块设计：`docs/modules/cost-ledger.md`
 - 源码事实核对：2026-07-17，基于 develop `f8daab72`，见模块设计 §3
 
@@ -151,6 +151,21 @@
   CPU 争用超时，降低并发后该分片 273/273 通过。CLI integration 因 Windows
   耗时从交接建议的 3 批细化为 7 批（每批均包含 init），publish-package 在
   studio dist 预构建后拆为 1+6 两批，均完整通过。
+- 2026-07-17：TASK-004B 正式自审结论 `approved`。
+  - Blocker：0；settled event 在终态 Store 操作完成后统一经
+    `volume-production-orchestrator.ts:261-274` await 触发，回调异常被 catch，
+    原结果不增加字段。
+  - Major：0；事件快照在 `volume-production-orchestrator.ts:102-134` 独立复制并
+    递归冻结；测试在回调中成功重新获取书锁，证明触发点位于终态落盘和解锁之后。
+  - Minor：0；Recorder 在 `cost-ledger-recorder.ts:51-86,90-202` 仅保留模型名，
+    未保留 baseUrl/apiKeyEnv；usageExtra、缺价原因、版本快照、重复 runId 和失败
+    marker 均有独立测试。
+  - Suggestion：后续商业入口接线直接使用 `recorder.onProductionSettled`；不得把
+    原始 CLI/Studio/Scheduler 绕过问题塞回本任务。
+- 2026-07-17：TASK-004B 最终验证（Windows，Node 24.18.0、pnpm 9.15.9）：
+  TASK-004 精确测试 4 files / 95 tests 通过；core 全量 1792 tests、studio 484
+  tests、CLI 209 tests 通过；三包 typecheck 和 build 全部通过。CLI integration
+  因 45 秒上限拆为 7 批且每批包含 init；publish-package 拆为 1+6 两批。
 
 ## 12. 已知仓库不一致（记录，不在本任务静默修复）
 
@@ -160,12 +175,38 @@ TASK-003 条目由用户裁决。
 
 ## 13. 实际结果
 
-（实现完成后回填）
+- TASK-004A：新增 `cost-ledger.ts`、`model-price-table.ts`、价格表示例、根导出和
+  51 项精确测试。账本按书保存到 `commercial/cost-ledger.jsonl`，具备严格 Schema、
+  单临界区追加、runId 去重、字节级撕裂检测、证据保全修复、失败 marker、BigInt
+  聚合和 `ledgerHealth`。
+- TASK-004B：新增 `cost-ledger-recorder.ts`，编排器新增可选
+  `events.onProductionSettled`。事件是深冻结独立快照，在商业终态落盘并释放锁后、
+  返回结果前 await 触发；回调和账本失败均 fail-open。
+- Recorder 从构造期 PipelineConfig 快照主模型和 override 模型名；不保留端点或
+  凭证字段；未知 usage 字段进入 `usageExtra`；明确区分 `price_table_missing`、
+  `price_table_invalid`、`model_not_found`、`token_usage_missing`；保存 core 版本快照。
+- `VolumeProductionResult` 保持 TASK-003B 形状，无成本诊断字段回流；不传 events
+  时有明确回归断言。
+- 新增/修改源码与测试均位于允许范围；未修改 Runner、Provider、Prompt、模型路由、
+  故事状态、SQLite、TASK-003A Schema、CLI、Studio、daemon、Scheduler、依赖或 lockfile。
+- TASK-004A 已先独立合并并推送 develop（`158e456d`）；TASK-004B 按独立分支完成。
 
 ## 14. 遗留问题
 
-（实现完成后回填）
+- Blocker：无。
+- Major：无。
+- 已知范围限制：只记录经商业 `VolumeProductionOrchestrator` 且显式绑定 Recorder
+  的运行；原始 `write next`、`auto`、daemon、Scheduler 仍可绕过商业入口。
+- Provider 内部重试次数仍不可观测；v1 只记录商业运行级聚合 token。
+- 多模型 override 场景仍按主模型估算并标记 `approximate: true`，无法按 agent 拆价。
+- 未实现 CLI/Studio 报表、预算控制、自动对账或自动修复；`tokenTotals.exact=false`
+  时未来展示层必须明确标为近似。
+- TASK-003 总任务仍待用户在真实凭证环境完成人工验收，与 TASK-004 完成状态独立。
+- TASK-003 文档白名单历史不一致继续按 §12 保留，未擅自修复。
 
 ## 15. 最终状态
 
-（实现完成后回填）
+`completed`
+
+跨设备完成报告、后续建议和新对话提示词见
+[`TASK-004-COMPLETION-AND-NEXT-STEPS.md`](TASK-004-COMPLETION-AND-NEXT-STEPS.md)。

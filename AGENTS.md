@@ -6,13 +6,15 @@
 
 ## 当前阶段
 
-原版基线完成，准备进行真实模型冒烟验证和最小商业层开发。
+TASK-004 模型成本账本已完成；TASK-003A/003B 代码已完成，TASK-003 总任务仍待用户
+在真实凭证环境人工验收。下一开发任务尚未冻结，不得把完成报告中的建议直接视为批准任务单。
 
 ## 开始任务前必须读取
 
 - `docs/00-product-brief.md`
 - `docs/PROJECT-STATUS.md`
 - `docs/tasks/TASK-INDEX.md`
+- `docs/tasks/TASK-004-COMPLETION-AND-NEXT-STEPS.md`（跨设备最新交接事实）
 - 当前任务对应的 TASK 文档
 - 与任务相关的模块设计文档
 - 相关 ADR
@@ -54,3 +56,12 @@
 ## 完成标准
 
 每个任务完成后必须报告：修改文件、设计决策、执行命令、测试结果、未解决问题、风险、手动验证方法和建议下一任务。
+
+## 跨设备与新对话接手
+
+- 以 GitHub `origin/develop` 为跨设备事实源，不依赖本地 bundle、临时目录或旧对话。
+- 新对话先读取 `docs/tasks/TASK-004-COMPLETION-AND-NEXT-STEPS.md`，再核对
+  `PROJECT-STATUS`、`TASK-INDEX` 和真实代码/测试；文档与代码冲突时按事实来源优先级处理。
+- 后续任务必须先创建或批准 TASK 文档并完成设计审查；报告中的入口治理、暂停恢复、
+  报表等只是候选，不是冻结需求。
+- 任何跨设备交接文档必须提交并推送到 GitHub；不得只留在 `work`、`tmp` 或聊天记录中。
