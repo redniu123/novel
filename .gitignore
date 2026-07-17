@@ -72,3 +72,5 @@ inkos.json
 prompt/
 CLAUDE.md
 !/CLAUDE.md
+!docs/tasks/TASK-004-cost-ledger.md
+!docs/modules/cost-ledger.md
