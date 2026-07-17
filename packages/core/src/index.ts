@@ -237,13 +237,18 @@ export type {
   VolumeProductionStateV1,
   VolumeProductionStopReason,
 } from "./commercial/volume-production-state.js";
-export type {
-  ProduceNextVolumeChapterInput,
-  VolumePipelineRunnerFactory,
-  VolumePipelineRunnerLike,
-  VolumeProductionOrchestratorOptions,
-  VolumeProductionResult,
-  VolumeStateStoreForOrchestrator,
+export {
+  VolumeProductionOrchestrator,
+  buildVolumePipelineConfig,
+  type VolumeProductionEvents,
+  type VolumeProductionSettledEvent,
+  type VolumeProductionSettledResultSnapshot,
+  type ProduceNextVolumeChapterInput,
+  type VolumePipelineRunnerFactory,
+  type VolumePipelineRunnerLike,
+  type VolumeProductionOrchestratorOptions,
+  type VolumeProductionResult,
+  type VolumeStateStoreForOrchestrator,
 } from "./commercial/volume-production-orchestrator.js";
 export type {
   VolumeManualReviewInput,
@@ -289,6 +294,12 @@ export {
   type ModelPriceTableV1,
   type ModelPriceV1,
 } from "./commercial/model-price-table.js";
+export {
+  CostLedgerRecorder,
+  type CostLedgerRecorderOptions,
+  type CostLedgerRecorderPipelineConfig,
+  type CostLedgerRecorderStore,
+} from "./commercial/cost-ledger-recorder.js";
 export { safeChildPath } from "./utils/path-safety.js";
 export { toPosixPath } from "./utils/posix-path.js";
 export {
