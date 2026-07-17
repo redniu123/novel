@@ -14,7 +14,7 @@
 - 复审结论：2026-07-16 `approved_with_changes`，无 Blocker；两项 Major 澄清已冻结
 - 审查修订日期：2026-07-16
 - 源码事实复核：2026-07-16，15 项 InkOS 接口与返回数据已逐项核对
-- 下一步：TASK-003A 已完成复审并合并 develop；实现并审查 TASK-003B
+- 下一步：TASK-003A/TASK-003B 均已实现并审查；等待真实模型人工验收
 
 本任务是 TASK-003A 和 TASK-003B 的总任务，不在一个实现轮同时交付全部代码。
 
@@ -280,9 +280,9 @@ TASK-003B 的 Runner 工厂强制 `PipelineConfig.chapterReviewMode = "auto"`，
 - TASK-003A Commit：`3d15e2b` 实现；`1e3c00d` 复审修复。
 - TASK-003A 测试：`pnpm typecheck`、`pnpm test`、`pnpm build` 均通过；TASK-003A 精确测试和 TASK-002 回归共 39 tests 通过。
 - TASK-003A 交付：Policy Resolver、商业状态 v1 Schema/Store、Pipeline 结果映射纯函数、`isReleaseEligible` 和 Store `releaseEligible` API。
-- TASK-003B Commit：未开始。
-- TASK-003B 测试：未开始。
-- 总体验收：TASK-003 仍 `in_progress`，TASK-003A 已完成复审，等待 TASK-003B 实现与审查。
+- TASK-003B Commit：`ff4a9b6`。
+- TASK-003B 测试：28 项编排器/审核测试通过；TASK-003 精确测试共 67 tests；全量 typecheck、test、build 通过。
+- 总体验收：TASK-003A、TASK-003B 代码均已完成并审查；总任务保持 `in_progress`，等待第 12 节真实模型人工验收后收口。
 ## 18. 遗留问题
 
 > 实现和复审阶段填写。
@@ -296,4 +296,4 @@ TASK-003B 的 Runner 工厂强制 `PipelineConfig.chapterReviewMode = "auto"`，
 
 `in_progress`
 
-下一步：实现并审查 TASK-003B。
+下一步：用户在真实凭证环境按第 12 节完成人工验收，然后将 TASK-003 置为 `completed`。
