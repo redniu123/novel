@@ -27,8 +27,12 @@ export const COST_LEDGER_FAILURES_RELATIVE_PATH = "commercial/cost-ledger-failur
 export const COST_LEDGER_TORN_BACKUP_PREFIX = "commercial/cost-ledger.torn.";
 
 const IsoDateSchema = z.string().datetime();
-const NonNegativeIntSchema = z.number().int().nonnegative();
-const DecimalStringSchema = z.string().regex(/^\d+(\.\d+)?$/, "expected a non-negative decimal string");
+const NonNegativeIntSchema = z.number().int().nonnegative().lte(Number.MAX_SAFE_INTEGER);
+const PositiveIntSchema = z.number().int().positive().lte(Number.MAX_SAFE_INTEGER);
+const DecimalStringSchema = z
+  .string()
+  .max(64)
+  .regex(/^\d+(\.\d+)?$/, "expected a non-negative decimal string");
 
 export const CostLedgerTokenUsageSchema = z
   .object({
@@ -73,11 +77,11 @@ export type CostLedgerCostV1 = z.infer<typeof CostLedgerCostSchema>;
 export const CostLedgerEntrySchema = z
   .object({
     schemaVersion: z.literal(COST_LEDGER_SCHEMA_VERSION),
-    seq: z.number().int().positive(),
+    seq: PositiveIntSchema,
     entryId: z.string().min(1),
     runId: z.string().min(1),
     bookId: z.string().min(1),
-    chapterNumber: z.number().int().positive().optional(),
+    chapterNumber: PositiveIntSchema.optional(),
     recordedAt: IsoDateSchema,
     productionStatus: VolumeChapterProductionStatusSchema,
     pipelineStatus: VolumePipelineStatusSchema.optional(),
@@ -231,6 +235,14 @@ export class CostLedgerStore {
       }
 
       const lastSeq = parsed.entries.length > 0 ? parsed.entries[parsed.entries.length - 1].seq : 0;
+      if (lastSeq >= Number.MAX_SAFE_INTEGER) {
+        throw new CostLedgerError(
+          "LEDGER_INVALID_SCHEMA",
+          paths.bookId,
+          "Ledger seq counter exhausted; refusing to break monotonicity",
+          { runId: input.runId },
+        );
+      }
       const candidate = {
         schemaVersion: COST_LEDGER_SCHEMA_VERSION,
         seq: lastSeq + 1,
@@ -380,21 +392,25 @@ export class CostLedgerStore {
   async recordWriteFailure(bookId: string, failure: { readonly errorCode: string; readonly runId?: string }): Promise<CostLedgerFailureMarkerV1 | undefined> {
     try {
       const paths = this.resolvePaths(bookId);
-      const existing = await this.readFailureMarker(bookId);
-      const missed = existing?.missedRunIds ?? [];
-      const nextMissed =
-        failure.runId !== undefined && !missed.includes(failure.runId)
-          ? [...missed, failure.runId].slice(-MISSED_RUN_ID_LIMIT)
-          : [...missed];
-      const marker: CostLedgerFailureMarkerV1 = {
-        schemaVersion: COST_LEDGER_SCHEMA_VERSION,
-        failureCount: (existing?.failureCount ?? 0) + 1,
-        lastErrorCode: failure.errorCode,
-        lastFailedAt: this.now().toISOString(),
-        missedRunIds: nextMissed,
-      };
-      await this.writeFailureMarker(paths, marker);
-      return marker;
+      // Read-modify-write under the same cross-process book lock as the
+      // ledger itself; concurrent failures must not lose counts (review R2-1).
+      return await this.withBookLock(paths.bookId, failure.runId, async () => {
+        const existing = await this.readFailureMarker(bookId);
+        const missed = existing?.missedRunIds ?? [];
+        const nextMissed =
+          failure.runId !== undefined && !missed.includes(failure.runId)
+            ? [...missed, failure.runId].slice(-MISSED_RUN_ID_LIMIT)
+            : [...missed];
+        const marker: CostLedgerFailureMarkerV1 = {
+          schemaVersion: COST_LEDGER_SCHEMA_VERSION,
+          failureCount: (existing?.failureCount ?? 0) + 1,
+          lastErrorCode: failure.errorCode,
+          lastFailedAt: this.now().toISOString(),
+          missedRunIds: nextMissed,
+        };
+        await this.writeFailureMarker(paths, marker);
+        return marker;
+      });
     } catch {
       // Final fallback is the caller's logger; the marker itself is best-effort.
       return undefined;
@@ -412,13 +428,21 @@ export class CostLedgerStore {
         cause: error,
       });
     }
+    let parsed: unknown;
     try {
-      return CostLedgerFailureMarkerSchema.parse(JSON.parse(raw));
+      parsed = JSON.parse(raw);
     } catch (error) {
-      throw new CostLedgerError("LEDGER_INVALID_JSON", paths.bookId, "Ledger failure marker is corrupt", {
+      throw new CostLedgerError("LEDGER_INVALID_JSON", paths.bookId, "Ledger failure marker is not valid JSON", {
         cause: error,
       });
     }
+    const validated = CostLedgerFailureMarkerSchema.safeParse(parsed);
+    if (!validated.success) {
+      throw new CostLedgerError("LEDGER_INVALID_SCHEMA", paths.bookId, "Ledger failure marker failed schema validation", {
+        cause: validated.error,
+      });
+    }
+    return validated.data;
   }
 
   /** Explicit human acknowledgement after repair/backfill; never automatic. */
@@ -496,23 +520,30 @@ export class CostLedgerStore {
    * - seq not strictly ascending -> LEDGER_INVALID_SCHEMA
    */
   private parsePrefix(paths: ResolvedLedgerPaths, raw: Buffer): ParsedLedger {
-    const text = raw.toString("utf-8");
-    if (text.length === 0) return { entries: [], validByteLength: 0, tornBytes: 0 };
+    if (raw.byteLength === 0) return { entries: [], validByteLength: 0, tornBytes: 0 };
 
-    const endsWithNewline = text.endsWith("\n");
-    const body = endsWithNewline ? text.slice(0, -1) : text;
-    const lines = body.length > 0 ? body.split("\n") : [];
+    // Byte-level line scanning: offsets are computed on the raw buffer, never
+    // recovered from decoded strings. Decoding is strict (fatal) per line so
+    // invalid UTF-8 can neither shift repair offsets nor smuggle U+FFFD
+    // replacements into accepted entries (code review finding R2-3).
+    const NEWLINE = 0x0a;
+    const decoder = new TextDecoder("utf-8", { fatal: true });
     const entries: CostLedgerEntryV1[] = [];
+    let lineStart = 0;
+    let lineNumber = 0;
     let validByteLength = 0;
 
-    for (let index = 0; index < lines.length; index++) {
-      const line = lines[index];
-      const isLastLine = index === lines.length - 1;
-      const lineNumber = index + 1;
+    while (lineStart < raw.byteLength) {
+      const newlineIndex = raw.indexOf(NEWLINE, lineStart);
+      const hasNewline = newlineIndex !== -1;
+      const lineEnd = hasNewline ? newlineIndex : raw.byteLength;
+      const isLastLine = !hasNewline || lineEnd + 1 >= raw.byteLength;
+      lineNumber += 1;
+      const lineBytes = raw.subarray(lineStart, lineEnd);
 
       let parsedLine: unknown;
       try {
-        parsedLine = JSON.parse(line);
+        parsedLine = JSON.parse(decoder.decode(lineBytes));
       } catch (cause) {
         if (isLastLine) {
           return { entries, validByteLength, tornBytes: raw.byteLength - validByteLength };
@@ -520,12 +551,12 @@ export class CostLedgerStore {
         throw new CostLedgerError(
           "LEDGER_INVALID_JSON",
           paths.bookId,
-          "Cost ledger line " + lineNumber + " is not valid JSON",
+          "Cost ledger line " + lineNumber + " is not valid JSON/UTF-8",
           { lineNumber, cause },
         );
       }
 
-      if (isLastLine && !endsWithNewline) {
+      if (!hasNewline) {
         // A truncated-but-parseable tail is still torn: completed writes
         // always end with "\n" (single-write append invariant).
         return { entries, validByteLength, tornBytes: raw.byteLength - validByteLength };
@@ -570,7 +601,8 @@ export class CostLedgerStore {
       }
 
       entries.push(entry);
-      validByteLength += Buffer.byteLength(line, "utf-8") + 1;
+      validByteLength = lineEnd + 1;
+      lineStart = lineEnd + 1;
     }
 
     return { entries, validByteLength, tornBytes: 0 };
@@ -626,6 +658,11 @@ export interface CostLedgerAggregate {
     readonly promptTokens: number;
     readonly completionTokens: number;
     readonly totalTokens: number;
+    /**
+     * False when any total exceeded Number.MAX_SAFE_INTEGER during BigInt
+     * summation (values are then approximate; review finding R2-2).
+     */
+    readonly exact: boolean;
   };
   /** Exact decimal totals per currency (mixed currencies never collapse). */
   readonly costTotals: Readonly<Record<string, string>>;
@@ -638,9 +675,9 @@ export interface CostLedgerAggregate {
 }
 
 export function aggregateCostLedgerEntries(entries: ReadonlyArray<CostLedgerEntryV1>): CostLedgerAggregate {
-  let promptTokens = 0;
-  let completionTokens = 0;
-  let totalTokens = 0;
+  let promptTokens = 0n;
+  let completionTokens = 0n;
+  let totalTokens = 0n;
   let entriesWithCost = 0;
   let approximateCostEntries = 0;
   const costTotals: Record<string, string> = {};
@@ -650,9 +687,9 @@ export function aggregateCostLedgerEntries(entries: ReadonlyArray<CostLedgerEntr
 
   for (const entry of entries) {
     if (entry.tokenUsage) {
-      promptTokens += entry.tokenUsage.promptTokens;
-      completionTokens += entry.tokenUsage.completionTokens;
-      totalTokens += entry.tokenUsage.totalTokens;
+      promptTokens += BigInt(entry.tokenUsage.promptTokens);
+      completionTokens += BigInt(entry.tokenUsage.completionTokens);
+      totalTokens += BigInt(entry.tokenUsage.totalTokens);
     }
     if (entry.cost) {
       entriesWithCost += 1;
@@ -671,9 +708,16 @@ export function aggregateCostLedgerEntries(entries: ReadonlyArray<CostLedgerEntr
     }
   }
 
+  const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+  const exact = promptTokens <= maxSafe && completionTokens <= maxSafe && totalTokens <= maxSafe;
   return {
     entryCount: entries.length,
-    tokenTotals: { promptTokens, completionTokens, totalTokens },
+    tokenTotals: {
+      promptTokens: Number(promptTokens),
+      completionTokens: Number(completionTokens),
+      totalTokens: Number(totalTokens),
+      exact,
+    },
     costTotals,
     entriesWithCost,
     entriesWithoutCost: entries.length - entriesWithCost,
@@ -751,7 +795,10 @@ export async function summarizeProjectCostLedger(
   for (const bookId of bookIds) {
     books.push(await summarizeBookCostLedger(store, bookId));
   }
-  const combinedTokens = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+  let combinedPrompt = 0n;
+  let combinedCompletion = 0n;
+  let combinedTotal = 0n;
+  let combinedExact = true;
   const combinedCost: Record<string, string> = {};
   let entryCount = 0;
   let entriesWithCost = 0;
@@ -763,9 +810,10 @@ export async function summarizeProjectCostLedger(
     entryCount += book.aggregate.entryCount;
     entriesWithCost += book.aggregate.entriesWithCost;
     approximateCostEntries += book.aggregate.approximateCostEntries;
-    combinedTokens.promptTokens += book.aggregate.tokenTotals.promptTokens;
-    combinedTokens.completionTokens += book.aggregate.tokenTotals.completionTokens;
-    combinedTokens.totalTokens += book.aggregate.tokenTotals.totalTokens;
+    combinedPrompt += BigInt(book.aggregate.tokenTotals.promptTokens);
+    combinedCompletion += BigInt(book.aggregate.tokenTotals.completionTokens);
+    combinedTotal += BigInt(book.aggregate.tokenTotals.totalTokens);
+    combinedExact = combinedExact && book.aggregate.tokenTotals.exact;
     for (const [currency, amount] of Object.entries(book.aggregate.costTotals)) {
       combinedCost[currency] = addDecimalStrings(combinedCost[currency] ?? "0", amount);
     }
@@ -783,7 +831,17 @@ export async function summarizeProjectCostLedger(
     books,
     combined: {
       entryCount,
-      tokenTotals: combinedTokens,
+      tokenTotals: (() => {
+        const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+        const exact =
+          combinedExact && combinedPrompt <= maxSafe && combinedCompletion <= maxSafe && combinedTotal <= maxSafe;
+        return {
+          promptTokens: Number(combinedPrompt),
+          completionTokens: Number(combinedCompletion),
+          totalTokens: Number(combinedTotal),
+          exact,
+        };
+      })(),
       costTotals: combinedCost,
       entriesWithCost,
       entriesWithoutCost: entryCount - entriesWithCost,

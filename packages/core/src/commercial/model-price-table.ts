@@ -13,10 +13,21 @@ import { safeChildPath } from "../utils/path-safety.js";
 export const MODEL_PRICE_TABLE_SCHEMA_VERSION = 1 as const;
 export const MODEL_PRICE_TABLE_RELATIVE_PATH = "config/model-prices.json";
 
-const DECIMAL_PATTERN = /^\d+(\.\d+)?$/;
+/**
+ * External price strings: canonical form only (no leading zeros), at most
+ * 12 fraction digits, bounded total length. The length caps close a BigInt
+ * DoS reported in the Codex code review round (unbounded digits would feed
+ * string concat + BigInt parsing + 10n ** scale exponentiation).
+ */
+const DECIMAL_PATTERN = /^(0|[1-9]\d*)(\.\d{1,12})?$/;
+const MAX_PRICE_STRING_LENGTH = 32;
+/** Internal guard for accumulated totals (looser, still bounded). */
+const MAX_INTERNAL_DECIMAL_LENGTH = 256;
+const INTERNAL_DECIMAL_PATTERN = /^\d+(\.\d+)?$/;
 const DecimalStringSchema = z
   .string()
-  .regex(DECIMAL_PATTERN, "expected a non-negative decimal string like \"12\" or \"0.35\"");
+  .max(MAX_PRICE_STRING_LENGTH)
+  .regex(DECIMAL_PATTERN, "expected a canonical non-negative decimal string like \"12\" or \"0.35\" (max 12 fraction digits)");
 
 export const ModelPriceSchema = z
   .object({
@@ -96,8 +107,8 @@ interface ScaledDecimal {
 }
 
 function parseDecimal(value: string): ScaledDecimal {
-  if (!DECIMAL_PATTERN.test(value)) {
-    throw new TypeError("Invalid decimal string: " + JSON.stringify(value));
+  if (value.length > MAX_INTERNAL_DECIMAL_LENGTH || !INTERNAL_DECIMAL_PATTERN.test(value)) {
+    throw new TypeError("Invalid decimal string: " + JSON.stringify(value.slice(0, 64)));
   }
   const [integerPart, fractionPart = ""] = value.split(".");
   return { units: BigInt(integerPart + fractionPart), scale: fractionPart.length };
@@ -172,8 +183,9 @@ export function computeCost(input: {
     totalCost: formatDecimal(alignAndAdd(promptCost, completionCost)),
     priceTableVersion: input.priceTableVersion,
     unitPriceSnapshot: {
-      promptPerMTokens: input.price.promptPerMTokens,
-      completionPerMTokens: input.price.completionPerMTokens,
+      // Canonicalized so that "0001.2300" and "1.23" snapshot identically.
+      promptPerMTokens: formatDecimal(promptPrice),
+      completionPerMTokens: formatDecimal(completionPrice),
     },
     approximate: input.approximate,
   };
