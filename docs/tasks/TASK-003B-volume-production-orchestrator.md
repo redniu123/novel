@@ -4,12 +4,13 @@
 
 - 任务编号：TASK-003B
 - 任务名称：走量单章薄编排器与商业人工审核 API
-- 当前状态：`pending`
+- 当前状态：`completed`
 - 总任务：TASK-003
 - 前置依赖：TASK-003A `completed`
 - 建议实现分支：`feature/TASK-003B-volume-orchestrator`
 - 模块设计：`docs/modules/volume-production-strategy.md`
 - 源码事实复核：2026-07-16，Runner 配置、中止和章节号接口已核对
+- 代码审查：2026-07-17 Claude Code 按验收标准 16 项与测试要求 23 项逐项自审通过（用户授权代行）
 
 ## 2. 目标
 
@@ -171,22 +172,33 @@ tokenUsage 只从 `ChapterPipelineResult.tokenUsage` 可选透传，不从 audit
 
 ## 12. 实际结果
 
-> 实现后填写。
-
 - 修改文件：
+  - `packages/core/src/commercial/volume-production-orchestrator.ts`
+  - `packages/core/src/commercial/volume-production-review.ts`
+  - `packages/core/src/__tests__/volume-production-orchestrator.test.ts`
+  - `packages/core/src/index.ts`（仅类型导出）
+  - 本任务、TASK-003、模块设计、TASK-INDEX 和 PROJECT-STATUS Markdown
+- 设计决策：
+  - `basePipelineConfig` 由调用方在构造 Orchestrator 时提供；默认 Runner 工厂用 `buildVolumePipelineConfig` 纯函数合并，强制 `chapterReviewMode: "auto"`、`writingReviewRetries = policy.maxAutoRevisions`，并把 `projectRoot` 钉在 Orchestrator 自身根目录防跨项目泄漏。
+  - 超时/取消用内部 `AbortController` 组合用户 signal 与 3,600,000 ms timer，经 Runner 公共 `runWithAbortSignal` 包裹恰好一次 `writeNextChapter`；`timedOut`/`userAborted` 标志决定 `PRODUCTION_TIMEOUT`/`PRODUCTION_ABORTED`，其余异常统一 `PRODUCTION_PIPELINE_FAILED`，不解析错误文本；`finally` 清理 timer 与 listener。
+  - `VolumeProductionResult` 增加可选 `failureCause` 诊断字段（保留 cause，不持久化、不用于分类），是对模块设计 13.2 的最小扩展。
+  - 商业审核经 `VolumeProductionReviewService.reviewChapter` 只调用受保护 `recordManualReview` 转换；发布资格只经 `releaseEligible`。
 - 测试：
-- Commit：
-- 审查：
+  - 新增 `volume-production-orchestrator.test.ts` 28 tests，覆盖本任务 §8 全部 23 项要求。
+  - TASK-003 精确测试合计 67 tests（003A 23 + 003B 28 + TASK-002 回归 16）通过。
+  - `pnpm typecheck`（core/cli/studio 分包）、core 全量 175 files / 1725 tests、studio 484 tests、cli 208/209 tests（1 项发布打包测试受沙箱 45 秒限制未执行，与本任务无关）、`pnpm build` 三包全部通过。
+- Commit：`ff4a9b6`。
+- 审查：2026-07-17 Claude Code 自审通过（用户授权代行）；无 Blocker/Major。
 
 ## 13. 遗留问题
 
-> 实现和审查后填写。
-
-- Blocker：
-- Major：
-- Minor：
-- Suggestion：
+- Blocker：无。
+- Major：无。
+- Minor：`failureCause` 为设计 13.2 之外的最小新增诊断字段，已记录；本任务 §9 真实模型人工验收需合法模型凭证，待用户在本机隔离项目执行，自动化测试已全部覆盖对应行为。
+- Suggestion：后续任务再做 CLI/Studio/Scheduler 商业入口接入、暂停恢复和 `request_revision` 执行；商业生产运行手册需强调关闭 daemon 与原始批量入口。
 
 ## 14. 最终状态
 
-`pending`
+`completed`
+
+下一步：用户按 §9 在真实凭证环境完成人工验收；随后 TASK-003 总任务收口。
