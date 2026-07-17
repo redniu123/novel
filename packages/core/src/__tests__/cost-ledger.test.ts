@@ -13,7 +13,7 @@ import {
   type AppendCostLedgerEntryInput,
   type CostLedgerEntryV1,
 } from "../commercial/cost-ledger.js";
-import { BookWriteLockError } from "../state/manager.js";
+import { BookWriteLockError, StateManager } from "../state/manager.js";
 
 const BOOK_ID = "book-alpha";
 
@@ -69,6 +69,23 @@ describe("cost ledger store", () => {
       expect(entries.map((entry) => entry.runId)).toEqual(["run-1", "run-2"]);
       expect(entries[1].chapterNumber).toBe(2);
       expect(entries[0].schemaVersion).toBe(1);
+    });
+
+    it("keeps seq and file order authoritative when the wall clock moves backward", async () => {
+      const timestamps = [
+        new Date("2026-07-17T02:00:00.000Z"),
+        new Date("2026-07-17T01:00:00.000Z"),
+      ];
+      const rollbackStore = new CostLedgerStore(projectRoot, { now: () => timestamps.shift()! });
+      await rollbackStore.append(BOOK_ID, appendInput({ runId: "run-before-rollback" }));
+      await rollbackStore.append(BOOK_ID, appendInput({ runId: "run-after-rollback" }));
+
+      const entries = await rollbackStore.read(BOOK_ID);
+      expect(entries.map(({ seq, runId }) => ({ seq, runId }))).toEqual([
+        { seq: 1, runId: "run-before-rollback" },
+        { seq: 2, runId: "run-after-rollback" },
+      ]);
+      expect(entries[1].recordedAt < entries[0].recordedAt).toBe(true);
     });
 
     it("keeps the file valid JSONL with one line per entry", async () => {
@@ -141,6 +158,18 @@ describe("cost ledger store", () => {
       ).toBe(false);
     });
 
+    it("rejects unsafe token, seq, and chapter integers", () => {
+      const unsafe = Number.MAX_SAFE_INTEGER + 1;
+      expect(
+        CostLedgerEntrySchema.safeParse({
+          ...validEntry(),
+          tokenUsage: { promptTokens: unsafe, completionTokens: 0, totalTokens: unsafe },
+        }).success,
+      ).toBe(false);
+      expect(CostLedgerEntrySchema.safeParse({ ...validEntry(), seq: unsafe }).success).toBe(false);
+      expect(CostLedgerEntrySchema.safeParse({ ...validEntry(), chapterNumber: unsafe }).success).toBe(false);
+    });
+
     it("rejects unknown fields (closed field set)", () => {
       expect(CostLedgerEntrySchema.safeParse({ ...validEntry(), baseUrl: "https://leak.example" }).success).toBe(false);
     });
@@ -197,6 +226,29 @@ describe("cost ledger store", () => {
       await seedValidLines(1);
       const raw = await readFile(ledgerPath(), "utf-8");
       await writeFile(ledgerPath(), "not json at all\n" + raw, "utf-8");
+      await expectCode(store.read(BOOK_ID), "LEDGER_INVALID_JSON");
+    });
+
+    it("treats invalid UTF-8 at the tail as torn and repairs exact byte offsets", async () => {
+      await seedValidLines(1);
+      const healthy = await readFile(ledgerPath());
+      const invalidTail = Buffer.from([0xff, 0xfe, 0x80]);
+      await writeFile(ledgerPath(), Buffer.concat([healthy, invalidTail]));
+
+      await expectCode(store.read(BOOK_ID), "LEDGER_TORN_TAIL");
+      const result = await store.repairTornTail(BOOK_ID);
+      expect(result.repaired).toBe(true);
+      if (!result.repaired) throw new Error("unreachable");
+      expect(result.removedBytes).toBe(invalidTail.byteLength);
+      expect(await readFile(result.backupPath)).toEqual(invalidTail);
+      expect(await readFile(ledgerPath())).toEqual(healthy);
+    });
+
+    it("treats invalid UTF-8 in a complete middle line as LEDGER_INVALID_JSON", async () => {
+      await seedValidLines(1);
+      const healthy = await readFile(ledgerPath());
+      const invalidMiddleLine = Buffer.from([0xff, 0x0a]);
+      await writeFile(ledgerPath(), Buffer.concat([invalidMiddleLine, healthy]));
       await expectCode(store.read(BOOK_ID), "LEDGER_INVALID_JSON");
     });
 
@@ -280,10 +332,32 @@ describe("cost ledger store", () => {
       expect(await store.readFailureMarker(BOOK_ID)).toBeUndefined();
     });
 
-    it("reports a corrupt marker instead of silently replacing it", async () => {
+    it("reports invalid marker JSON instead of silently replacing it", async () => {
       await mkdir(join(projectRoot, "books", BOOK_ID, "commercial"), { recursive: true });
       await writeFile(join(projectRoot, "books", BOOK_ID, "commercial", "cost-ledger-failures.json"), "{broken", "utf-8");
       await expectCode(store.readFailureMarker(BOOK_ID), "LEDGER_INVALID_JSON");
+    });
+
+    it("reports marker schema corruption separately from invalid JSON", async () => {
+      await mkdir(join(projectRoot, "books", BOOK_ID, "commercial"), { recursive: true });
+      await writeFile(
+        join(projectRoot, "books", BOOK_ID, "commercial", "cost-ledger-failures.json"),
+        JSON.stringify({ schemaVersion: 1, failureCount: "not-a-number" }),
+        "utf-8",
+      );
+      await expectCode(store.readFailureMarker(BOOK_ID), "LEDGER_INVALID_SCHEMA");
+    });
+
+    it("returns undefined when the book lock is already occupied", async () => {
+      const release = await new StateManager(projectRoot).acquireBookLock(BOOK_ID);
+      try {
+        await expect(
+          store.recordWriteFailure(BOOK_ID, { errorCode: "LEDGER_WRITE_FAILED", runId: "run-locked" }),
+        ).resolves.toBeUndefined();
+      } finally {
+        await release();
+      }
+      expect(await store.readFailureMarker(BOOK_ID)).toBeUndefined();
     });
   });
 
@@ -375,6 +449,27 @@ describe("cost ledger store", () => {
         CostLedgerEntrySchema.parse(entryB),
       ]);
       expect(aggregate.costTotals).toEqual({ CNY: "1.5", USD: "0.25" });
+    });
+
+    it("marks token totals inexact when safe entries overflow in aggregate", () => {
+      const first = CostLedgerEntrySchema.parse({
+        ...validEntry(),
+        tokenUsage: {
+          promptTokens: Number.MAX_SAFE_INTEGER,
+          completionTokens: 1,
+          totalTokens: Number.MAX_SAFE_INTEGER,
+        },
+      });
+      const second = CostLedgerEntrySchema.parse({
+        ...validEntry(),
+        seq: 2,
+        runId: "run-2",
+        entryId: "entry-2",
+        tokenUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 1 },
+      });
+      const aggregate = aggregateCostLedgerEntries([first, second]);
+      expect(aggregate.tokenTotals.exact).toBe(false);
+      expect(aggregate.tokenTotals.promptTokens).toBe(Number.MAX_SAFE_INTEGER + 1);
     });
   });
 

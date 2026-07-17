@@ -129,6 +129,28 @@
   模块设计 §16。
 - 2026-07-17：P7（主模型计价+估算标记）、P8（价格表 ignore+提交模板）由用户
   裁决冻结；设计审查通过，进入 TASK-004A 实现。
+- 2026-07-17：Codex 第二轮代码对抗复审完成（1 Blocker / 3 Major / 3 Minor，
+  全部采纳并修复）：价格十进制串增加格式、总长度与小数位上限；failure marker
+  读改写纳入书级锁；token/seq/chapterNumber 限制为安全整数并增加 seq 耗尽守卫；
+  聚合改用 BigInt 求和并公开 `tokenTotals.exact`；JSONL 改为原始字节扫描与严格
+  UTF-8 解码；failure marker 区分 JSON/Schema 错误码；单价快照规范化。原始
+  审查输出保存在交接材料 `task004-handoff/codex-reviews/code-*.md`，7 条均无遗留。
+- 2026-07-17：TASK-004A 正式自审结论 `approved`。
+  - Blocker：0；价格输入在 `model-price-table.ts:22-30,109-114` 有界，超长输入
+    在进入 BigInt 前被拒，测试见 `model-price-table.test.ts:75,191`。
+  - Major：0；书级锁、严格字节偏移、安全整数与 BigInt 聚合修复分别位于
+    `cost-ledger.ts:392-418,522-609,30-31,677-727`，对抗测试覆盖锁占用、非法
+    UTF-8 尾/中间行、修复偏移、聚合溢出和时钟回拨。
+  - Minor：0；failure marker JSON/Schema 错误码和单价快照规范化均有独立回归。
+  - Suggestion：后续报表展示必须在 `tokenTotals.exact=false` 时明确标识近似值；
+    本任务不实现展示层。
+- 2026-07-17：TASK-004A 修复后验证（Windows，Node 24.18.0、pnpm 9.15.9）：
+  精确测试 2 files / 51 tests 通过；core typecheck 通过；core 全量 5 分片共
+  1776 tests、studio 484 tests、CLI 209 tests 通过；三包 typecheck 和 build
+  全部通过。第 4 core 分片首次与另外两片并发时有 1 个既有动态导入测试因
+  CPU 争用超时，降低并发后该分片 273/273 通过。CLI integration 因 Windows
+  耗时从交接建议的 3 批细化为 7 批（每批均包含 init），publish-package 在
+  studio dist 预构建后拆为 1+6 两批，均完整通过。
 
 ## 12. 已知仓库不一致（记录，不在本任务静默修复）
 

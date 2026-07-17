@@ -72,6 +72,30 @@ describe("model price table", () => {
       await expect(loadModelPriceTable(projectRoot)).rejects.toBeInstanceOf(ModelPriceTableError);
     });
 
+    it("rejects overlong price strings before decimal parsing", async () => {
+      await writeTable(
+        JSON.stringify({
+          schemaVersion: 1,
+          version: "v",
+          currency: "CNY",
+          models: { m: { promptPerMTokens: "0." + "1".repeat(10_000), completionPerMTokens: "1" } },
+        }),
+      );
+      await expect(loadModelPriceTable(projectRoot)).rejects.toBeInstanceOf(ModelPriceTableError);
+    });
+
+    it("rejects non-canonical prices with leading zeros", async () => {
+      await writeTable(
+        JSON.stringify({
+          schemaVersion: 1,
+          version: "v",
+          currency: "CNY",
+          models: { m: { promptPerMTokens: "0001.23", completionPerMTokens: "1" } },
+        }),
+      );
+      await expect(loadModelPriceTable(projectRoot)).rejects.toBeInstanceOf(ModelPriceTableError);
+    });
+
     it("rejects unsupported schema versions", async () => {
       await writeTable(JSON.stringify({ schemaVersion: 2, version: "v", currency: "CNY", models: {} }));
       await expect(loadModelPriceTable(projectRoot)).rejects.toBeInstanceOf(ModelPriceTableError);
@@ -125,6 +149,21 @@ describe("model price table", () => {
       expect(cost.totalCost).toBe("0");
     });
 
+    it("canonicalizes unit price snapshots even for direct non-canonical inputs", () => {
+      const cost = computeCost({
+        promptTokens: 1,
+        completionTokens: 1,
+        price: { promptPerMTokens: "0001.2300", completionPerMTokens: "0000.5000" },
+        currency: "CNY",
+        priceTableVersion: "v",
+        approximate: false,
+      });
+      expect(cost.unitPriceSnapshot).toEqual({
+        promptPerMTokens: "1.23",
+        completionPerMTokens: "0.5",
+      });
+    });
+
     it("rejects negative, fractional, and unsafe token counts", () => {
       for (const bad of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, Number.NaN, Number.POSITIVE_INFINITY]) {
         expect(() =>
@@ -147,6 +186,10 @@ describe("model price table", () => {
       let total = "0";
       for (let index = 0; index < 10; index++) total = addDecimalStrings(total, "0.1");
       expect(total).toBe("1"); // the classic 0.1*10 float trap
+    });
+
+    it("rejects overlong internal decimal operands before BigInt work", () => {
+      expect(() => addDecimalStrings("1".repeat(257), "0")).toThrow(TypeError);
     });
   });
 });
