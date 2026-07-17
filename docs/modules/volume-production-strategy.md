@@ -10,7 +10,7 @@
 - 设计分支：`docs/TASK-003-volume-strategy-design`
 - 基线：`develop` / `30af928`
 - 前置任务：TASK-002 `completed`，已合并 `develop`
-- 本轮范围：设计已复审；TASK-003A 实现完成待审，TASK-003B 未实现
+- 本轮范围：设计已复审；TASK-003A 已完成复审并合并 develop，TASK-003B 实现中
 - 首轮审查结论：`rejected`
 - 复审结论：2026-07-16 `approved_with_changes`，无 Blocker；两项 Major 澄清已冻结到本文档
 - 参数冻结：2026-07-16 用户确认 1-12 全部采用推荐方案
@@ -21,7 +21,7 @@
 - TASK-003A：冻结策略类型、商业状态 v1 Schema、State Store、发布资格纯函数和按书查询 API。
 - TASK-003B：实现只调用一次现有 Runner 的薄编排器和商业人工审核 API。
 
-TASK-003A 已实现，等待 Claude Code 审查；仍不得提前实现 TASK-003B 范围。
+TASK-003A 已通过 Claude Code 复审（2026-07-17 `approved_with_changes`，Major 已修复）；TASK-003B 按本设计实现。
 
 ## 2. 背景和问题定义
 
@@ -507,9 +507,11 @@ export interface VolumePipelineObservationV1 {
   readonly auditGate: VolumeAuditGateV1;
   readonly lengthGate: VolumeLengthGateV1;
 }
+```
 
 该 Observation 是从 `ChapterPipelineResult` 纯计算出的瞬时值。它不包含 `tokenUsage`，持久化 run 只复制其中的章节号和 gate 摘要。
 
+```typescript
 export interface VolumeProductionRunV1 {
   readonly runId: string;
   readonly expectedChapterNumber: number;

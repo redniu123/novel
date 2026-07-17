@@ -4,12 +4,13 @@
 
 - 任务编号：TASK-003A
 - 任务名称：冻结走量策略并实现商业状态 v1 Schema/Store
-- 当前状态：`implemented_pending_review`
+- 当前状态：`completed`
 - 总任务：TASK-003
 - 前置依赖：TASK-002；TASK-003 设计复审通过
 - 建议实现分支：`feature/TASK-003A-volume-policy-state`
 - 模块设计：`docs/modules/volume-production-strategy.md`
 - 源码事实复核：2026-07-16，公开结果字段和配置读取链已核对
+- 代码复审：2026-07-17 Claude Code `approved_with_changes`，无 Blocker；唯一 Major 已修复
 
 ## 2. 目标
 
@@ -183,18 +184,18 @@ books/<bookId>/commercial/volume-production-state.json
   - `pnpm typecheck` 通过。
   - `pnpm test` 通过：core 174 files / 1697 tests；studio 55 files / 484 tests；cli 38 files / 209 tests。
   - `pnpm build` 通过。
-- Commit：待本实现提交。
-- 审查：待 Claude Code 审查 TASK-003A 实现。
+- Commit：`3d15e2b` 实现；`1e3c00d` 复审修复（移除 `save()` 逃逸口）。
+- 审查：2026-07-17 Claude Code 复审 `approved_with_changes`，无 Blocker；唯一 Major（`VolumeProductionStateStore.save()` 可绕过受保护状态转换）已按方案 A 修复并回归通过。
 
 ## 12. 遗留问题
 
 - Blocker：无。
-- Major：待 Claude Code 复审确认。
-- Minor：TASK-003B 仍需按总设计补齐超时 `timeoutFired`/`userAborted` 语义和 fake timer 测试。
-- Suggestion：TASK-003A 复审通过后再创建 TASK-003B 实现分支，不提前接入 Runner、CLI、Studio 或 Scheduler。
+- Major：复审 Major-1（`save()` 公开逃逸口）已在 `1e3c00d` 修复：Store 只保留 `startRun`/`completeRun`/`pauseActiveRun`/`recordManualReview` 受保护写入。
+- Minor：持久化类型的只读性弱于模块设计声明（zod 推断为可变数组），运行时不受影响，留待后续对齐；TASK-003B 仍需补齐超时 `timeoutFired`/`userAborted` 语义和 fake timer 测试。
+- Suggestion：TASK-003B 用测试断言编排器与审核 API 只通过受保护转换方法写商业状态。
 
 ## 13. 最终状态
 
-`implemented_pending_review`
+`completed`
 
-下一步：Claude Code 审查 TASK-003A 实现。
+下一步：实现并审查 TASK-003B。
