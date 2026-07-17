@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "version": "2026-07-17",
+  "currency": "CNY",
+  "models": {
+    "example-model-id": {
+      "promptPerMTokens": "2.5",
+      "completionPerMTokens": "9.8"
+    }
+  }
+}

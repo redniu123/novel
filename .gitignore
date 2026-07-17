@@ -74,3 +74,5 @@ CLAUDE.md
 !/CLAUDE.md
 !docs/tasks/TASK-004-cost-ledger.md
 !docs/modules/cost-ledger.md
+config/model-prices.json
+!config/model-prices.example.json

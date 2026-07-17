@@ -250,6 +250,45 @@ export type {
   VolumeProductionReviewServiceOptions,
   VolumeStateStoreForReview,
 } from "./commercial/volume-production-review.js";
+export {
+  COST_LEDGER_SCHEMA_VERSION,
+  COST_LEDGER_RELATIVE_PATH,
+  COST_LEDGER_FAILURES_RELATIVE_PATH,
+  CostLedgerEntrySchema,
+  CostLedgerError,
+  CostLedgerErrorCodeSchema,
+  CostLedgerFailureMarkerSchema,
+  CostLedgerStore,
+  CostUnavailableReasonSchema,
+  aggregateCostLedgerEntries,
+  summarizeBookCostLedger,
+  summarizeProjectCostLedger,
+  type AppendCostLedgerEntryInput,
+  type BookCostLedgerSummary,
+  type CostLedgerAggregate,
+  type CostLedgerEntryV1,
+  type CostLedgerErrorCode,
+  type CostLedgerFailureMarkerV1,
+  type CostLedgerHealth,
+  type CostLedgerInspection,
+  type CostLedgerTokenUsageV1,
+  type CostUnavailableReason,
+  type ProjectCostLedgerSummary,
+  type RepairTornTailResult,
+} from "./commercial/cost-ledger.js";
+export {
+  MODEL_PRICE_TABLE_SCHEMA_VERSION,
+  MODEL_PRICE_TABLE_RELATIVE_PATH,
+  ModelPriceSchema,
+  ModelPriceTableError,
+  ModelPriceTableSchema,
+  addDecimalStrings,
+  computeCost,
+  loadModelPriceTable,
+  type ComputedCost,
+  type ModelPriceTableV1,
+  type ModelPriceV1,
+} from "./commercial/model-price-table.js";
 export { safeChildPath } from "./utils/path-safety.js";
 export { toPosixPath } from "./utils/posix-path.js";
 export {
