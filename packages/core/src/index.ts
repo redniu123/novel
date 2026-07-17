@@ -237,6 +237,19 @@ export type {
   VolumeProductionStateV1,
   VolumeProductionStopReason,
 } from "./commercial/volume-production-state.js";
+export type {
+  ProduceNextVolumeChapterInput,
+  VolumePipelineRunnerFactory,
+  VolumePipelineRunnerLike,
+  VolumeProductionOrchestratorOptions,
+  VolumeProductionResult,
+  VolumeStateStoreForOrchestrator,
+} from "./commercial/volume-production-orchestrator.js";
+export type {
+  VolumeManualReviewInput,
+  VolumeProductionReviewServiceOptions,
+  VolumeStateStoreForReview,
+} from "./commercial/volume-production-review.js";
 export { safeChildPath } from "./utils/path-safety.js";
 export { toPosixPath } from "./utils/posix-path.js";
 export {
