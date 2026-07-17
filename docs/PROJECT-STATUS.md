@@ -1,19 +1,19 @@
 # 项目状态
 
-最后更新时间：2026-07-16
+最后更新时间：2026-07-17
 
 ## 基本信息
 
 | 项目 | 当前值 |
 | --- | --- |
 | 项目名称 | 基于 InkOS 的小说智能体 |
-| 当前阶段 | TASK-003 设计复审通过（approved_with_changes），TASK-003A 进入实现 |
+| 当前阶段 | TASK-003A 完成并合并 develop；TASK-003B 实现中 |
 | InkOS 版本 | 1.7.0 |
 | 基线 Commit | `7ac8d530557154653cdac83c07dd7488c1460191` |
 | 远程默认稳定分支 | `origin/master` |
 | 本地兼容稳定分支 | `main`，跟踪 `upstream/master`，本轮保留 |
 | 集成分支 | `develop` |
-| 当前工作分支 | `feature/TASK-003A-volume-policy-state` |
+| 当前工作分支 | `feature/TASK-003B-volume-orchestrator` |
 | origin | `https://github.com/redniu123/novel.git` |
 | upstream | `https://github.com/Narcooo/inkos.git` |
 
@@ -21,12 +21,13 @@
 
 - 已完成：TASK-001 `completed`；TASK-001A `completed`；TASK-001B `completed`；TASK-001C `completed`；TASK-002 `completed`（2026-07-15 Claude Code 审查通过，代行人工验收 9 项检查通过，已合并 `develop`）。
 - 当前总任务：TASK-003（走量小说生产策略）`in_progress`。
-- 当前子任务：TASK-003A（走量策略与商业状态 Schema）`in_progress`。
-- 后续子任务：TASK-003B（走量单章薄编排器）`pending`，依赖 TASK-003A。
+- 当前子任务：TASK-003B（走量单章薄编排器）`in_progress`，依赖 TASK-003A `completed`。
+- 已完成子任务：TASK-003A（走量策略与商业状态 Schema）`completed`，2026-07-17 复审通过并合并 `develop`。
 - 2026-07-16：TASK-003 首轮设计审查结论为 `rejected`；用户已确认 1-12 全部推荐参数并批准拆分，文档已按 Blocker/Major/Minor/Suggestion 修订。
 - 2026-07-16：进一步核对 Runner、审查循环、长度治理、Abort、状态、CLI/Scheduler 和根导出；文档已明确直接字段与派生字段、真实配置链和公共接入方式。
 - 2026-07-16：TASK-003 设计复审结论为 `approved_with_changes`，无 Blocker；projectRoot 绑定 API 和公开 API 导入边界已澄清。
-- 下一步：Codex 实现 TASK-003A，完成后交给 Claude Code 审查 TASK-003A 实现。
+- 2026-07-17：TASK-003A 代码复审结论 `approved_with_changes`，无 Blocker；唯一 Major（Store `save()` 逃逸口）已修复（`1e3c00d`）并回归通过；随后合并 `develop`。
+- 下一步：实现 TASK-003B 并交 Claude Code 审查。
 
 任务明细见 [TASK 索引](tasks/TASK-INDEX.md)。
 
@@ -59,7 +60,9 @@
 - TASK-001C 为纯文档任务，DOCX 已重新生成并完成逐页渲染检查。
 - TASK-002 新增 16 项 production mode 测试；固定 Node 24.14.0、pnpm 9.15.9 下 typecheck、test、build 均通过。
 - TASK-002 验收：2026-07-15 基于 `pnpm build` 产物在隔离临时目录完成 9 项手动验收检查（默认值、落盘持久化、书籍隔离、非法值、损坏文件、路径穿越、故事状态不受影响），全部通过。
-- TASK-003 本轮仍为纯文档设计修订；完成 15 项源码事实静态核对和 Markdown 一致性检查，未运行功能测试。
+- TASK-003 设计轮已完成纯文档修订；完成 15 项源码事实静态核对和 Markdown 一致性检查。
+- TASK-003A 实现验证：2026-07-16 固定 Node 24.14.0、pnpm 9.15.9；`pnpm --filter @actalk/inkos-core typecheck`、`pnpm --filter @actalk/inkos-core test -- volume-production-policy-state.test.ts book-strategy.test.ts`、`pnpm typecheck`、`pnpm test`、`pnpm build` 均通过。全量测试通过 core 174 files / 1697 tests、studio 55 files / 484 tests、cli 38 files / 209 tests。
+- TASK-003A 复审验证：2026-07-17 在 Linux 沙箱 Node 22.22.3、pnpm 9.15.9 下按包/分片重跑 typecheck、全量测试和 build 均通过（cli 1 项发布打包测试因沙箱单命令 45 秒限制未执行，与本任务无关）；npm registry 因本机安全软件拦截改走 npmmirror 镜像，lockfile 未变更。Major-1 修复后精确测试 39 项回归通过。
 
 详见 [InkOS 基线分析](02-inkos-baseline.md)。
 

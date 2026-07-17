@@ -216,6 +216,27 @@ export {
   type ProductionMode,
   type ResolvedBookStrategy,
 } from "./commercial/book-strategy.js";
+export type {
+  VolumeProductionPolicyErrorCode,
+  VolumeProductionPolicyResolverOptions,
+  VolumeProductionPolicyV1,
+} from "./commercial/volume-production-policy.js";
+export type {
+  VolumeAuditGateV1,
+  VolumeBookProductionStatus,
+  VolumeChapterProductionRecordV1,
+  VolumeChapterProductionStatus,
+  VolumeLengthGateV1,
+  VolumeManualReviewDecision,
+  VolumeManualReviewV1,
+  VolumePipelineObservationV1,
+  VolumePipelineStatus,
+  VolumeProductionRunV1,
+  VolumeProductionStateErrorCode,
+  VolumeProductionStateStoreOptions,
+  VolumeProductionStateV1,
+  VolumeProductionStopReason,
+} from "./commercial/volume-production-state.js";
 export { safeChildPath } from "./utils/path-safety.js";
 export { toPosixPath } from "./utils/posix-path.js";
 export {
