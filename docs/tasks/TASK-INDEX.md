@@ -1,6 +1,6 @@
 # TASK 索引
 
-最后更新时间：2026-07-17
+最后更新时间：2026-07-23
 
 | 任务编号 | 名称 | 状态 | 分支 | 依赖 | 交付物 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -13,5 +13,6 @@
 | TASK-003A | 走量策略与商业状态 Schema | `completed` | `feature/TASK-003A-volume-policy-state` | TASK-003 设计复审通过 | Policy、State v1、Store、映射和发布资格 | 2026-07-17 Claude Code 复审 `approved_with_changes`；Major-1 已修复；合并 develop |
 | TASK-003B | 走量单章薄编排器 | `completed` | `feature/TASK-003B-volume-orchestrator` | TASK-003A | Orchestrator、商业审核 API、超时和测试 | 2026-07-17 实现并自审通过（28 项新测试）；真实模型人工验收待用户执行 |
 | TASK-004 | 模型成本账本 | `completed` | `feature/TASK-004-cost-ledger`、`feature/TASK-004B-ledger-recorder` | TASK-003A/003B | JSONL 账本、价格表、聚合、Recorder、settled event | 2026-07-17 设计红队与代码复审闭环；core 1792 / studio 484 / CLI 209 全过；已完成报告 |
+| BIZ-001 | 番茄短故事商业化生产计划 | `completed` | `docs/BIZ-001-fanqie-short-story-business-plan` | TASK-004；不阻塞 TASK-003 人工验收 | 商业方案库、两篇投稿试验协议、单位经济与止损标准 | 2026-07-23 纯文档完成；不提交生成小说、不自动投稿 |
 
 状态值统一使用：`pending`、`pending_design_review`、`in_progress`、`completed`、`completed_with_blockers`、`blocked`、`failed`、`implemented_pending_review`。

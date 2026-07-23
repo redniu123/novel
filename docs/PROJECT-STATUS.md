@@ -1,19 +1,19 @@
 # 项目状态
 
-最后更新时间：2026-07-17
+最后更新时间：2026-07-23
 
 ## 基本信息
 
 | 项目 | 当前值 |
 | --- | --- |
 | 项目名称 | 基于 InkOS 的小说智能体 |
-| 当前阶段 | TASK-004 成本账本完成；TASK-003 总验收仍待真实模型人工验收 |
+| 当前阶段 | TASK-004 成本账本完成；TASK-003 总验收仍待真实模型人工验收；BIZ-001 商业计划完成 |
 | InkOS 版本 | 1.7.0 |
 | 基线 Commit | `7ac8d530557154653cdac83c07dd7488c1460191` |
 | 远程默认稳定分支 | `origin/master` |
 | 本地兼容稳定分支 | `main`，跟踪 `upstream/master`，本轮保留 |
 | 集成分支 | `develop` |
-| 当前工作分支 | `develop`（TASK-004 完成后）；下一任务尚未冻结 |
+| 当前工作分支 | `docs/BIZ-001-fanqie-short-story-business-plan` |
 | origin | `https://github.com/redniu123/novel.git` |
 | upstream | `https://github.com/Narcooo/inkos.git` |
 
@@ -23,11 +23,12 @@
 - 当前总任务：TASK-003（走量小说生产策略）`in_progress`。
 - 已完成子任务：TASK-003A `completed`（2026-07-17 复审通过并合并 develop）；TASK-003B `completed`（2026-07-17 实现并自审通过，28 项新测试）。
 - 已完成：TASK-004 `completed`（004A 账本/价格表/聚合；004B Recorder/settled event；设计红队和代码复审全部闭环）。
+- 商业发现任务：BIZ-001（番茄短故事商业化生产计划）`completed`；独立于第一阶段长篇 MVP，不占用已预留的 TASK-005 编号。
 - 2026-07-16：TASK-003 首轮设计审查结论为 `rejected`；用户已确认 1-12 全部推荐参数并批准拆分，文档已按 Blocker/Major/Minor/Suggestion 修订。
 - 2026-07-16：进一步核对 Runner、审查循环、长度治理、Abort、状态、CLI/Scheduler 和根导出；文档已明确直接字段与派生字段、真实配置链和公共接入方式。
 - 2026-07-16：TASK-003 设计复审结论为 `approved_with_changes`，无 Blocker；projectRoot 绑定 API 和公开 API 导入边界已澄清。
 - 2026-07-17：TASK-003A 代码复审结论 `approved_with_changes`，无 Blocker；唯一 Major（Store `save()` 逃逸口）已修复（`1e3c00d`）并回归通过；随后合并 `develop`。
-- 下一步：用户在真实凭证环境按 TASK-003 第 12 节完成人工验收；新开发任务优先做商业入口治理设计，再做暂停恢复。后续建议见 [TASK-004 完成与后续报告](tasks/TASK-004-COMPLETION-AND-NEXT-STEPS.md)。
+- 下一步：用户在真实凭证环境按 TASK-003 第 12 节完成人工验收；按 BIZ-001 商业计划执行两篇短故事人工投稿试验。工程后续建议见 [TASK-004 完成与后续报告](tasks/TASK-004-COMPLETION-AND-NEXT-STEPS.md)。
 
 任务明细见 [TASK 索引](tasks/TASK-INDEX.md)。
 
@@ -64,9 +65,7 @@
 - TASK-003A 实现验证：2026-07-16 固定 Node 24.14.0、pnpm 9.15.9；`pnpm --filter @actalk/inkos-core typecheck`、`pnpm --filter @actalk/inkos-core test -- volume-production-policy-state.test.ts book-strategy.test.ts`、`pnpm typecheck`、`pnpm test`、`pnpm build` 均通过。全量测试通过 core 174 files / 1697 tests、studio 55 files / 484 tests、cli 38 files / 209 tests。
 - TASK-003A 复审验证：2026-07-17 在 Linux 沙箱 Node 22.22.3、pnpm 9.15.9 下按包/分片重跑 typecheck、全量测试和 build 均通过（cli 1 项发布打包测试因沙箱单命令 45 秒限制未执行，与本任务无关）；npm registry 因本机安全软件拦截改走 npmmirror 镜像，lockfile 未变更。Major-1 修复后精确测试 39 项回归通过。
 - TASK-003B 实现验证：2026-07-17 同环境下新增编排器/审核测试 28 项通过；TASK-003 精确测试共 67 tests；core 全量 175 files / 1725 tests、studio 484、cli 208/209（同一沙箱限制项）与三包 build 全部通过。
-- TASK-004 最终验证：2026-07-17，Windows Node 24.18.0、pnpm 9.15.9；TASK-004
-  精确测试 4 files / 95 tests；core 1792 tests、studio 484 tests、CLI 209 tests；
-  三包 typecheck/build 全部通过。CLI 长测试按 45 秒环境限制分批，未跳过用例。
+- TASK-004 最终验证：2026-07-17，Windows Node 24.18.0、pnpm 9.15.9；TASK-004 精确测试 4 files / 95 tests；core 1792 tests、studio 484 tests、CLI 209 tests；三包 typecheck/build 全部通过。CLI 长测试按 45 秒环境限制分批，未跳过用例。
 
 详见 [InkOS 基线分析](02-inkos-baseline.md)。
 
@@ -77,9 +76,9 @@
 - 故事权威状态与商业运营数据分离；
 - 保留人工最终审核和人工发布；
 - TASK-003 商业完整管线重试固定为 0，只保留 Provider 现有有限重试；
-- TASK-003A 先交付策略和商业状态，TASK-003B 再交付薄编排器。
-- TASK-004 使用按书 JSONL 追加账本、写入时价格快照和运行级计量；多模型按主模型
-  估算并标记 approximate；编排器事件 fail-open 且不污染生产结果。
+- TASK-003A 先交付策略和商业状态，TASK-003B 再交付薄编排器；
+- TASK-004 使用按书 JSONL 追加账本、写入时价格快照和运行级计量；多模型按主模型估算并标记 approximate；编排器事件 fail-open 且不污染生产结果；
+- BIZ-001 只授权纯文档市场发现；生成短故事不得提交 Git，真实投稿继续保留人工闸门。
 
 ## 当前风险
 
@@ -93,4 +92,6 @@
 - Windows Studio E2E 启动命令不兼容；
 - 系统默认 Node/pnpm 可能绕过仓库版本声明；
 - 全局 Git 代理当前不可用，GitHub 命令需临时绕过代理；
-- AGPL-3.0-only 对未来网络服务和分发方案有合规约束。
+- AGPL-3.0-only 对未来网络服务和分发方案有合规约束；
+- 番茄活动、费率、AI 辅助、签约和版权规则可能变化，正式投稿必须重新核对作者后台和合同；
+- 短篇链尚未接入 TASK-004 自动成本账本，首批试验需要手工记录模型成本和人工工时。

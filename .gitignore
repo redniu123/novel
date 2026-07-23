@@ -74,6 +74,7 @@ CLAUDE.md
 !/CLAUDE.md
 !docs/tasks/TASK-004-cost-ledger.md
 !docs/tasks/TASK-004-COMPLETION-AND-NEXT-STEPS.md
+!docs/tasks/BIZ-001-fanqie-short-story-business-plan.md
 !docs/modules/cost-ledger.md
 config/model-prices.json
 !config/model-prices.example.json
