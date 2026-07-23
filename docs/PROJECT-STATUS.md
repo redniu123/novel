@@ -1,19 +1,19 @@
 # 项目状态
 
-最后更新时间：2026-07-17
+最后更新时间：2026-07-23
 
 ## 基本信息
 
 | 项目 | 当前值 |
 | --- | --- |
 | 项目名称 | 基于 InkOS 的小说智能体 |
-| 当前阶段 | TASK-004 成本账本完成；TASK-003 总验收仍待真实模型人工验收 |
+| 当前阶段 | TASK-005 连续生成与质量闭环设计；TASK-003 总验收仍待真实模型人工验收 |
 | InkOS 版本 | 1.7.0 |
 | 基线 Commit | `7ac8d530557154653cdac83c07dd7488c1460191` |
 | 远程默认稳定分支 | `origin/master` |
 | 本地兼容稳定分支 | `main`，跟踪 `upstream/master`，本轮保留 |
 | 集成分支 | `develop` |
-| 当前工作分支 | `develop`（TASK-004 完成后）；下一任务尚未冻结 |
+| 当前工作分支 | `feature/TASK-005-generation-quality-loop` |
 | origin | `https://github.com/redniu123/novel.git` |
 | upstream | `https://github.com/Narcooo/inkos.git` |
 
@@ -23,11 +23,15 @@
 - 当前总任务：TASK-003（走量小说生产策略）`in_progress`。
 - 已完成子任务：TASK-003A `completed`（2026-07-17 复审通过并合并 develop）；TASK-003B `completed`（2026-07-17 实现并自审通过，28 项新测试）。
 - 已完成：TASK-004 `completed`（004A 账本/价格表/聚合；004B Recorder/settled event；设计红队和代码复审全部闭环）。
+- 当前设计任务：TASK-005（真实小说连续生产与生成质量闭环）`pending_design_review`；
+  用户已批准任务编号、方向和观察优先原则，真实运行参数 P1-P10 待冻结。
 - 2026-07-16：TASK-003 首轮设计审查结论为 `rejected`；用户已确认 1-12 全部推荐参数并批准拆分，文档已按 Blocker/Major/Minor/Suggestion 修订。
 - 2026-07-16：进一步核对 Runner、审查循环、长度治理、Abort、状态、CLI/Scheduler 和根导出；文档已明确直接字段与派生字段、真实配置链和公共接入方式。
 - 2026-07-16：TASK-003 设计复审结论为 `approved_with_changes`，无 Blocker；projectRoot 绑定 API 和公开 API 导入边界已澄清。
 - 2026-07-17：TASK-003A 代码复审结论 `approved_with_changes`，无 Blocker；唯一 Major（Store `save()` 逃逸口）已修复（`1e3c00d`）并回归通过；随后合并 `develop`。
-- 下一步：用户在真实凭证环境按 TASK-003 第 12 节完成人工验收；新开发任务优先做商业入口治理设计，再做暂停恢复。后续建议见 [TASK-004 完成与后续报告](tasks/TASK-004-COMPLETION-AND-NEXT-STEPS.md)。
+- 下一步：完成 TASK-005 设计审查并冻结题材、模型、章节规模、字数、观察节奏和费用
+  安全边界；随后执行单书 20 章固定配置基线。TASK-003 人工验收尽量复用该基线证据，
+  未覆盖项继续保留。商业入口治理、暂停恢复、审核权限和成本报表延后到生成基线之后。
 
 任务明细见 [TASK 索引](tasks/TASK-INDEX.md)。
 
@@ -80,6 +84,8 @@
 - TASK-003A 先交付策略和商业状态，TASK-003B 再交付薄编排器。
 - TASK-004 使用按书 JSONL 追加账本、写入时价格快照和运行级计量；多模型按主模型
   估算并标记 approximate；编排器事件 fail-open 且不污染生产结果。
+- [ADR-002](decisions/ADR-002-observation-first-generation-validation.md)：TASK-005 先以
+  固定配置完成连续生成和观察，不预先把缺陷归因于 Prompt、模型或记忆层。
 
 ## 当前风险
 

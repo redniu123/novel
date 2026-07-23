@@ -74,6 +74,8 @@ CLAUDE.md
 !/CLAUDE.md
 !docs/tasks/TASK-004-cost-ledger.md
 !docs/tasks/TASK-004-COMPLETION-AND-NEXT-STEPS.md
+!docs/tasks/TASK-005-continuous-generation-quality-loop.md
 !docs/modules/cost-ledger.md
+!docs/decisions/ADR-002-observation-first-generation-validation.md
 config/model-prices.json
 !config/model-prices.example.json

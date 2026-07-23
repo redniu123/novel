@@ -6,8 +6,9 @@
 
 ## 当前阶段
 
-TASK-004 模型成本账本已完成；TASK-003A/003B 代码已完成，TASK-003 总任务仍待用户
-在真实凭证环境人工验收。下一开发任务尚未冻结，不得把完成报告中的建议直接视为批准任务单。
+TASK-005“真实小说连续生产与生成质量闭环”已由用户批准启动，当前处于设计审查和
+运行参数冻结阶段。TASK-003A/003B 代码已完成，TASK-003 总任务仍待真实模型人工验收，
+可复用 TASK-005 证据但不得自动宣称完成。
 
 ## 开始任务前必须读取
 
@@ -15,6 +16,8 @@ TASK-004 模型成本账本已完成；TASK-003A/003B 代码已完成，TASK-003
 - `docs/PROJECT-STATUS.md`
 - `docs/tasks/TASK-INDEX.md`
 - `docs/tasks/TASK-004-COMPLETION-AND-NEXT-STEPS.md`（跨设备最新交接事实）
+- `docs/tasks/TASK-005-continuous-generation-quality-loop.md`
+- `docs/decisions/ADR-002-observation-first-generation-validation.md`
 - 当前任务对应的 TASK 文档
 - 与任务相关的模块设计文档
 - 相关 ADR
@@ -62,6 +65,7 @@ TASK-004 模型成本账本已完成；TASK-003A/003B 代码已完成，TASK-003
 - 以 GitHub `origin/develop` 为跨设备事实源，不依赖本地 bundle、临时目录或旧对话。
 - 新对话先读取 `docs/tasks/TASK-004-COMPLETION-AND-NEXT-STEPS.md`，再核对
   `PROJECT-STATUS`、`TASK-INDEX` 和真实代码/测试；文档与代码冲突时按事实来源优先级处理。
-- 后续任务必须先创建或批准 TASK 文档并完成设计审查；报告中的入口治理、暂停恢复、
-  报表等只是候选，不是冻结需求。
+- TASK-005 基线遵守观察优先：参数冻结后先连续生成和记录，不在取得真实缺陷前修改
+  Prompt、模型路由、记忆、审查或核心管线。入口治理、暂停恢复、审核权限和报表仍是
+  候选，不是当前任务授权。
 - 任何跨设备交接文档必须提交并推送到 GitHub；不得只留在 `work`、`tmp` 或聊天记录中。
